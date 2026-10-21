@@ -1,0 +1,21 @@
+{
+  "manifestVersion": 1,
+  "access": {
+    "type": "embedded",
+    "url": "https://perform-fanvue.augur-2f4.workers.dev/embedded"
+  },
+  "oauth": {
+    "scopes": [
+      "read:self",
+      "read:media",
+      "read:chat",
+      "read:fan",
+      "read:insights",
+      "read:creator",
+      "write:chat"
+    ],
+    "redirectUris": [
+      "https://perform-fanvue.augur-2f4.workers.dev/oauth/callback"
+    ]
+  }
+}

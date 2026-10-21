@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "perform-fanvue",
+  "main": ".open-next/worker.js",
+  "upload_source_maps": true,
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "PERFORM_REAL_DB",
+      "database_name": "perform-real",
+      "database_id": "101d8691-9b7b-4f7f-8b15-f7b671ca74f3",
+      "migrations_dir": "migrations"
+    },
+    {
+      "binding": "PERFORM_DEMO_DB",
+      "database_name": "perform-demo",
+      "database_id": "195d363e-32f9-4ce7-8b42-a8ae32725069",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
