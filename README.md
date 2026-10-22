@@ -15,7 +15,12 @@ Every real effect sits behind server-side gates. A seeded workspace runs the sam
 
 ## Try it
 
-- **Video walkthrough:** <!-- TODO: add video link -->
+### Video walkthrough
+
+A live A/B test of a paid mass message sent to real subscribers, followed by the results dashboard with demo data.
+
+https://github.com/user-attachments/assets/2d8014f9-4b7b-4e16-aa76-fcf2f97d8459
+
 - **Hosted preview:** [perform-fanvue.augur-2f4.workers.dev/preview](https://perform-fanvue.augur-2f4.workers.dev/preview). No Fanvue account, install or login needed.
 
 Perform is an embedded Fanvue app: creators open it inside Fanvue, which signs them in. The hosted preview runs the same interface against seeded data, so it works in any browser and never contacts Fanvue.
