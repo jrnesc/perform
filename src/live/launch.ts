@@ -1,5 +1,6 @@
 import type { Arm } from "../domain/allocation";
 import type { SendIntentEvidence } from "../domain/experiment-state";
+import { observationWindowProblem } from "../domain/observation-window";
 import {
   FanvueWriteError,
   type FanvueWriteTransport,
@@ -150,6 +151,7 @@ export async function executeConfirmedLaunch(input: {
   creatorUuid: string;
   experimentId: string;
   scheduledAt: string;
+  observationEndsAt: string;
   confirmationHash: string;
   repository: PerformRepository;
   launchRepository: LaunchRepository;
@@ -173,8 +175,11 @@ export async function executeConfirmedLaunch(input: {
   if (Number.isNaN(scheduled.valueOf()) || scheduled.valueOf() < new Date(input.now()).valueOf() + 3 * 60_000) {
     throw new Error("The scheduled delivery must be at least three minutes in the future");
   }
+  const windowProblem = observationWindowProblem(input.scheduledAt, input.observationEndsAt);
+  if (windowProblem) throw new Error(windowProblem);
   await input.launchRepository.recordConfirmation({
-    scheduledAt: input.scheduledAt, confirmationHash: input.confirmationHash, confirmedAt: input.now(),
+    scheduledAt: input.scheduledAt, observationEndsAt: input.observationEndsAt,
+    confirmationHash: input.confirmationHash, confirmedAt: input.now(),
   });
   const [assignments, variants] = await Promise.all([
     input.repository.listAssignments(experiment.id), input.repository.listVariants(experiment.id),

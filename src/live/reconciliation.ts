@@ -2,9 +2,11 @@ import type { Arm } from "../domain/allocation";
 import { reconcileExperimentEarnings } from "../integrations/fanvue/earnings-reconciliation";
 import { readMassMessageAggregates } from "../integrations/fanvue/mass-message-aggregates";
 import type { FanvueReadTransport } from "../integrations/fanvue/live-read-contracts";
+import type { PerformRepository } from "../persistence/contracts";
 import type { LiveEvidenceRepository, ReconciliationRecord } from "../persistence/live-evidence";
 import { assignmentWindowStrategy, type PurchaseAttributionStrategy } from "./attribution";
 import { projectExperimentCommerce } from "./commerce-projection";
+import type { LaunchRepository } from "./launch-repository";
 
 const hour = 3_600_000;
 
@@ -142,4 +144,34 @@ async function compareWithMassMessages(
   const mismatch = read.missing.length > 0 || (["A", "B"] as const).some((arm) =>
     ours.purchases[arm] !== purchases[arm] || ours.grossMinor[arm] !== revenueMinor[arm]);
   return { purchases, revenueMinor, mismatch };
+}
+
+/**
+ * The manual reconciliation behind the detail page (ADR 0020): one window from delivery to the
+ * confirmed observation end (or now, if earlier), always with the mass-message totals check,
+ * because close needs both. The bounded planner above is for the future scheduled job.
+ */
+export async function reconcileObservation(input: {
+  experimentId: string;
+  creatorUuid: string;
+  repository: PerformRepository;
+  launchRepository: LaunchRepository;
+  evidenceRepository: LiveEvidenceRepository;
+  transport: FanvueReadTransport;
+  now: () => string;
+  newId: () => string;
+}): Promise<ReconciliationRecord> {
+  const experiment = await input.repository.getExperiment(input.experimentId);
+  if (!experiment || experiment.state !== "RUNNING") throw new Error("Only a running experiment can be reconciled");
+  const confirmation = await input.launchRepository.getConfirmation();
+  if (!confirmation) throw new Error("This experiment has no confirmed launch");
+  const startAt = experiment.observationStartedAt ?? experiment.launchedAt ?? confirmation.scheduledAt;
+  const now = input.now();
+  const endAt = Date.parse(now) < Date.parse(confirmation.observationEndsAt) ? now : confirmation.observationEndsAt;
+  if (Date.parse(endAt) <= Date.parse(startAt)) throw new Error("Nothing to reconcile before delivery");
+  return reconcileExperimentWindow({
+    experimentId: experiment.id, creatorUuid: input.creatorUuid, window: { startAt, endAt },
+    capturedAt: now, transport: input.transport, repository: input.evidenceRepository,
+    newId: input.newId, frozenConclusionRevision: null, checkMassMessages: true,
+  });
 }

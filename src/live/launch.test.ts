@@ -8,6 +8,7 @@ import { D1LaunchRepository } from "./launch-repository";
 
 const occurredAt = "2026-10-22T12:00:00.000Z";
 const scheduledAt = "2026-10-22T12:05:00.000Z";
+const observationEndsAt = "2026-10-29T12:05:00.000Z";
 
 async function allocatedExperiment(provenance: "REAL" | "DEMO" = "REAL") {
   const { sqlite, db } = createMigratedDatabase();
@@ -48,7 +49,7 @@ describe("controlled launch", () => {
     const result = await runGuardedRealLaunch({
       session: { userUuid: "creator-1", isCreator: true, scope: "write:chat read:fan" },
       env: { PERFORM_WRITE_MODE: "disabled" }, records: { verified: ["send"], activated: ["send"] },
-      experimentId: "experiment-1", scheduledAt, confirmationHash: "b".repeat(64),
+      experimentId: "experiment-1", scheduledAt, observationEndsAt, confirmationHash: "b".repeat(64),
       repositories, transport, now: () => occurredAt,
     });
     expect(result).toEqual({ status: "REFUSED", reason: "WRITE_MODE_DISABLED" });
@@ -72,7 +73,7 @@ describe("controlled launch", () => {
         OAUTH_SCOPES: "write:chat read:fan",
       },
       records: { verified: ["send"], activated: ["send"] },
-      experimentId: "experiment-1", scheduledAt, confirmationHash: "b".repeat(64),
+      experimentId: "experiment-1", scheduledAt, observationEndsAt, confirmationHash: "b".repeat(64),
       repositories: async () => ({
         repository, launchRepository: new D1LaunchRepository(db, "creator-1", "experiment-1"),
       }),
@@ -102,7 +103,7 @@ describe("controlled launch", () => {
     };
     const launchRepository = new D1LaunchRepository(db, "creator-1", "experiment-1");
     const launch = () => import("./launch").then(({ executeConfirmedLaunch }) => executeConfirmedLaunch({
-      creatorUuid: "creator-1", experimentId: "experiment-1", scheduledAt,
+      creatorUuid: "creator-1", experimentId: "experiment-1", scheduledAt, observationEndsAt,
       confirmationHash: "c".repeat(64), repository, launchRepository, transport, now: () => occurredAt,
     }));
     await expect(launch()).rejects.toThrow(/uncertain/);
@@ -129,7 +130,7 @@ describe("controlled launch", () => {
     const launchRepository = new D1LaunchRepository(db, "creator-1", "experiment-1");
     const { executeConfirmedLaunch } = await import("./launch");
     const launch = () => executeConfirmedLaunch({
-      creatorUuid: "creator-1", experimentId: "experiment-1", scheduledAt,
+      creatorUuid: "creator-1", experimentId: "experiment-1", scheduledAt, observationEndsAt,
       confirmationHash: "d".repeat(64), repository, launchRepository, transport, now: () => occurredAt,
     });
     await expect(launch()).resolves.toMatchObject({ status: "RETRYABLE" });

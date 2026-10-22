@@ -70,6 +70,8 @@ CREATE TABLE launch_confirmations (
   experiment_id TEXT PRIMARY KEY REFERENCES experiments(id) ON DELETE CASCADE,
   creator_uuid TEXT NOT NULL,
   scheduled_at TEXT NOT NULL,
+  -- End of the observation window the creator confirmed (ADR 0020); close cannot happen earlier.
+  observation_ends_at TEXT NOT NULL CHECK (observation_ends_at > scheduled_at),
   confirmation_hash TEXT NOT NULL CHECK (length(confirmation_hash) = 64),
   confirmed_at TEXT NOT NULL
 ) STRICT;

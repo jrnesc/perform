@@ -21,6 +21,7 @@ export async function runGuardedRealLaunch(input: {
   records: CapabilityRecordSnapshot;
   experimentId: string;
   scheduledAt: string;
+  observationEndsAt: string;
   confirmationHash: string;
   repositories: (creatorUuid: string) => Promise<{ repository: PerformRepository; launchRepository: LaunchRepository }>;
   transport: () => FanvueWriteTransport;
@@ -45,8 +46,8 @@ export async function runGuardedRealLaunch(input: {
 
   const result = await executeConfirmedLaunch({
     creatorUuid: session.userUuid, experimentId: experiment.id,
-    scheduledAt: input.scheduledAt, confirmationHash: input.confirmationHash,
-    repository: repositories.repository, launchRepository: repositories.launchRepository,
+    scheduledAt: input.scheduledAt, observationEndsAt: input.observationEndsAt,
+    confirmationHash: input.confirmationHash, repository: repositories.repository, launchRepository: repositories.launchRepository,
     transport: input.transport(), now: input.now,
   });
   return { status: "LAUNCHED", result };

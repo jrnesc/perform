@@ -6,6 +6,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ExperimentVariable, VariantDefinition } from "../../domain/experiment-state";
+import {
+  defaultObservationDays,
+  maxObservationDays,
+  minObservationDays,
+  observationEndFor,
+  observationWindowProblem,
+} from "../../domain/observation-window";
 import type { AudienceSnapshot, DryRunPlan, ExperimentReview } from "../../experiments/contracts";
 import type { MediaAsset, MediaPage, WorkspaceKind } from "../../workspace/contracts";
 import { ProgressStrip, SectionIcon, StageIcon, WatchfulEyeIcon, WritingPenIcon } from "./experiment-experience";
@@ -116,6 +123,7 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
     const pad = (value: number) => String(value).padStart(2, "0");
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   });
+  const [observationDays, setObservationDays] = useState(String(defaultObservationDays));
   const [launch, setLaunch] = useState<LaunchResponse | null>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
 
@@ -207,6 +215,15 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
     setReload((value) => value + 1);
   };
 
+  const observationEndLabel = useMemo(() => {
+    const deliveryMs = new Date(scheduledAt).getTime();
+    if (!Number.isFinite(deliveryMs)) return null;
+    const deliveryAt = new Date(deliveryMs).toISOString();
+    const endsAt = observationEndFor(deliveryAt, Number(observationDays));
+    if (observationWindowProblem(deliveryAt, endsAt)) return null;
+    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(endsAt));
+  }, [scheduledAt, observationDays]);
+
   const canContinue = Boolean(name.trim()) &&
     (step !== 0 || Boolean(selectedAudience)) &&
     (step !== 1 || Boolean(selectedAsset)) &&
@@ -279,6 +296,10 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
       if (!Number.isFinite(deliveryMs) || deliveryMs < Date.now() + 3 * 60_000) {
         return setValidation("Choose a delivery time at least 3 minutes from now so both arms can be set up first.");
       }
+      const deliveryAt = new Date(deliveryMs).toISOString();
+      const observationEndsAt = observationEndFor(deliveryAt, Number(observationDays));
+      const windowProblem = observationWindowProblem(deliveryAt, observationEndsAt);
+      if (windowProblem) return setValidation(`${windowProblem}.`);
       try {
         setAdvancing(true);
         const response = await authFetch("/api/experiments/launch", {
@@ -287,7 +308,8 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
           body: JSON.stringify({
             experimentId: review.experimentId,
             workspace,
-            scheduledAt: new Date(scheduledAt).toISOString(),
+            scheduledAt: deliveryAt,
+            observationEndsAt,
             confirmed: true,
           }),
         });
@@ -375,7 +397,8 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
             {!preview && <section className="launch-confirmation" aria-labelledby="launch-confirmation-title">
               <div className="section-head"><div className="flow-stage-heading"><div><SectionIcon section="launch" /><h2 id="launch-confirmation-title">Schedule both arms together</h2></div></div><p>Perform will create one frozen custom list per arm, add members in batches of up to 100, verify exact membership, then schedule both paid mass messages.</p></div>
               <label className="field schedule-field"><span>Scheduled delivery</span><small>Both messages are delivered at this time, in your local time zone. You can cancel until then.</small><input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
-              <dl className="launch-effects"><div><dt>Lists</dt><dd>2 custom lists · {review.armCounts.A} in A · {review.armCounts.B} in B</dd></div><div><dt>Member batches</dt><dd>{plan.summary.memberBatches}, each no larger than 100</dd></div><div><dt>Messages</dt><dd>2 scheduled paid mass messages · same delivery time</dd></div><div><dt>Media</dt><dd>{review.draft.asset.name}</dd></div></dl>
+              <label className="field schedule-field"><span>Observation window</span><small>Days after delivery that purchases count. You can close the experiment once it ends{observationEndLabel ? `: ${observationEndLabel}` : ""}.</small><input type="number" inputMode="numeric" min={minObservationDays} max={maxObservationDays} step={1} value={observationDays} disabled={Boolean(launch)} onChange={(event) => setObservationDays(event.target.value)} /></label>
+              <dl className="launch-effects"><div><dt>Lists</dt><dd>2 custom lists · {review.armCounts.A} in A · {review.armCounts.B} in B</dd></div><div><dt>Member batches</dt><dd>{plan.summary.memberBatches}, each no larger than 100</dd></div><div><dt>Messages</dt><dd>2 scheduled paid mass messages · same delivery time</dd></div><div><dt>Observation</dt><dd>{observationDays} {observationDays === "1" ? "day" : "days"} after delivery{observationEndLabel ? ` · ends ${observationEndLabel}` : ""}</dd></div><div><dt>Media</dt><dd>{review.draft.asset.name}</dd></div></dl>
               <p className="charge-warning"><WatchfulEyeIcon />Fans who unlock either message will be charged the displayed price.</p>
               {launch && <div className={`launch-outcome ${launch.result.status === "RUNNING" ? "success" : "warning"}`} role="status"><strong>{launch.result.status === "RUNNING" ? "Both messages are scheduled." : "Launch needs attention."}</strong><p>{launch.provenance === "DEMO" ? "Seeded demo: the full flow was recorded with zero Fanvue calls." : `REAL launch · ${launch.result.status.toLowerCase().replaceAll("_", " ")}`}{launch.result.reason ? ` ${launch.result.reason}` : ""}</p>{launch.result.status === "RUNNING" && <button type="button" className="secondary" onClick={async () => {
                 try {

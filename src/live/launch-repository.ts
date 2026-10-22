@@ -20,6 +20,7 @@ export type ProvisioningBatchRecord = {
 
 export type LaunchConfirmation = {
   scheduledAt: string;
+  observationEndsAt: string;
   confirmationHash: string;
   confirmedAt: string;
 };
@@ -71,24 +72,36 @@ export class D1LaunchRepository implements LaunchRepository {
   async recordConfirmation(input: LaunchConfirmation): Promise<void> {
     await this.db.prepare(
       `INSERT INTO launch_confirmations (
-         experiment_id, creator_uuid, scheduled_at, confirmation_hash, confirmed_at
-       ) VALUES (?, ?, ?, ?, ?)
+         experiment_id, creator_uuid, scheduled_at, observation_ends_at, confirmation_hash, confirmed_at
+       ) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(experiment_id) DO NOTHING`,
-    ).bind(this.experimentId, this.creatorUuid, input.scheduledAt, input.confirmationHash, input.confirmedAt).run();
+    ).bind(
+      this.experimentId, this.creatorUuid, input.scheduledAt, input.observationEndsAt,
+      input.confirmationHash, input.confirmedAt,
+    ).run();
     const saved = await this.getConfirmation();
-    if (!saved || saved.scheduledAt !== input.scheduledAt || saved.confirmationHash !== input.confirmationHash) {
+    if (!saved || saved.scheduledAt !== input.scheduledAt || saved.observationEndsAt !== input.observationEndsAt ||
+        saved.confirmationHash !== input.confirmationHash) {
       throw new Error("Launch confirmation is already bound to different effects");
     }
+    // Attribution and reconciliation read the window end from the experiment row.
+    await this.db.prepare(
+      `UPDATE experiments SET observation_ends_at = ?
+       WHERE id = ? AND creator_uuid = ? AND observation_ends_at IS NULL`,
+    ).bind(input.observationEndsAt, this.experimentId, this.creatorUuid).run();
   }
 
   async getConfirmation(): Promise<LaunchConfirmation | null> {
     const row = await this.db.prepare(
-      `SELECT scheduled_at, confirmation_hash, confirmed_at FROM launch_confirmations
+      `SELECT scheduled_at, observation_ends_at, confirmation_hash, confirmed_at FROM launch_confirmations
        WHERE experiment_id = ? AND creator_uuid = ?`,
     ).bind(this.experimentId, this.creatorUuid).first<{
-      scheduled_at: string; confirmation_hash: string; confirmed_at: string;
+      scheduled_at: string; observation_ends_at: string; confirmation_hash: string; confirmed_at: string;
     }>();
-    return row ? { scheduledAt: row.scheduled_at, confirmationHash: row.confirmation_hash, confirmedAt: row.confirmed_at } : null;
+    return row ? {
+      scheduledAt: row.scheduled_at, observationEndsAt: row.observation_ends_at,
+      confirmationHash: row.confirmation_hash, confirmedAt: row.confirmed_at,
+    } : null;
   }
 
   async beginList(arm: Arm, expectedCount: number, occurredAt: string): Promise<ProvisionedListRecord> {

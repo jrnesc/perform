@@ -71,7 +71,7 @@ h1, h2, h3, p { margin-top: 0; }
 .history-hero > div, .detail-hero > div { max-width: 720px; }
 .button-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
 .history-table-wrap { overflow-x: auto; border-radius: 14px; background: var(--surface); }
-.history-table { width: 100%; min-width: 740px; border-collapse: collapse; text-align: left; }
+.history-table { width: 100%; min-width: 820px; border-collapse: collapse; text-align: left; }
 .history-table th, .history-table td { padding: 15px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .history-table thead th { padding-top: 12px; padding-bottom: 10px; color: var(--muted); font-size: 9px; font-weight: 760; letter-spacing: .07em; text-transform: uppercase; }
 .history-table tbody th { width: 38%; font-size: 13px; }
@@ -83,7 +83,7 @@ h1, h2, h3, p { margin-top: 0; }
 .history-table tbody tr:hover { background: var(--surface-strong); }
 .fixture-note { display: flex; align-items: center; gap: 9px; margin: 0; padding: 11px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; }
 .status-pill, .fixture-label, .provenance-live { display: inline-flex; border-radius: 999px; padding: 6px 8px; font-size: 9px; font-weight: 760; text-transform: uppercase; letter-spacing: .05em; }
-.status-pill { color: var(--accent-ink); background: var(--accent-soft); }
+.status-pill { border-radius: 8px; color: var(--accent-ink); background: var(--accent-soft); }
 .state-partial_launch, .state-invalid { color: var(--danger-ink); background: var(--danger-soft); }
 .state-draft, .state-allocated { color: var(--warning-ink); background: var(--warning-soft); }
 .fixture-label { color: var(--muted); background: var(--bg); }
@@ -101,6 +101,13 @@ h1, h2, h3, p { margin-top: 0; }
 .detail-facts div { display: flex; justify-content: space-between; gap: 18px; padding: 11px 0; border-bottom: 1px solid var(--line); font-size: 11px; }
 .detail-facts dt { color: var(--muted); }
 .detail-facts dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.lifecycle-note { margin: 14px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.lifecycle-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+.lifecycle-actions .secondary { background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+.lifecycle-actions button:disabled { opacity: .38; cursor: default; }
+.lifecycle-outcome { margin: 14px 0 0; padding: 12px 14px; border-radius: 8px; background: var(--accent-soft); font-size: 12px; line-height: 1.5; }
+.lifecycle-outcome.blocked { color: var(--warning-ink); background: var(--warning-soft); }
+.lifecycle-outcome ul { margin: 6px 0 0; padding-left: 18px; }
 .frozen-variants { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 24px; }
 .frozen-variants h3 { grid-column: 1 / -1; margin: 0; font-size: 14px; }
 .frozen-variants article { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; padding: 14px; border-radius: 10px; background: var(--bg); }
