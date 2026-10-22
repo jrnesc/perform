@@ -1,5 +1,7 @@
 import type { PerformRepository } from "../persistence/contracts";
 import type { LiveEvidenceRepository } from "../persistence/live-evidence";
+import type { AnalysedResult } from "../results/contracts";
+import { analyseLiveExperiment } from "../results/live-analysis";
 import { buildLiveAudienceBreakdown, type LiveAudienceBreakdown } from "../results/live-audience-evidence";
 import type { CapabilityEnvironment, CapabilityState, LiveCapabilityId } from "./capabilities";
 import { deriveCapabilityStates } from "./capabilities";
@@ -19,7 +21,14 @@ export type GuardedLiveResults =
       reason: "NOT_A_VERIFIED_CREATOR" | "CAPABILITY_NOT_ACTIVE" | "EXPERIMENT_NOT_FOUND" | "NOT_REAL_PROVENANCE";
       capabilities?: Readonly<Partial<Record<LiveCapabilityId, CapabilityState>>>;
     }
-  | { status: "AVAILABLE"; provenance: "REAL"; experimentId: string; breakdown: LiveAudienceBreakdown };
+  | {
+      status: "AVAILABLE";
+      provenance: "REAL";
+      experimentId: string;
+      breakdown: LiveAudienceBreakdown;
+      /** The seeded results' analysis and evidence gates, run over this experiment's live evidence. */
+      analysis: AnalysedResult | null;
+    };
 
 /** Read-only REAL Results entry point. It cannot call Fanvue or mutate evidence. */
 export async function runGuardedLiveResults(input: {
@@ -27,6 +36,7 @@ export async function runGuardedLiveResults(input: {
   env: CapabilityEnvironment;
   records: CapabilityRecordSnapshot;
   experimentId: string;
+  now?: () => string;
   repositories: (creatorUuid: string) => Promise<{
     repository: PerformRepository;
     evidenceRepository: LiveEvidenceRepository;
@@ -53,7 +63,8 @@ export async function runGuardedLiveResults(input: {
     return { status: "REFUSED", reason: "EXPERIMENT_NOT_FOUND" };
   }
   if (experiment.dataProvenance !== "REAL") return { status: "REFUSED", reason: "NOT_REAL_PROVENANCE" };
-  const [rows, events, reconciliations] = await Promise.all([
+  const [variants, rows, events, reconciliations] = await Promise.all([
+    repository.listVariants(experiment.id),
     evidenceRepository.listAudienceEvidence(experiment.id),
     evidenceRepository.listCommerceEvents(experiment.id),
     evidenceRepository.listReconciliations(experiment.id),
@@ -73,6 +84,14 @@ export async function runGuardedLiveResults(input: {
       rows,
       events,
       attributionStrategy,
+    }),
+    analysis: analyseLiveExperiment({
+      experiment,
+      variants,
+      rows,
+      events,
+      reconciliations,
+      now: (input.now ?? (() => new Date().toISOString()))(),
     }),
   };
 }

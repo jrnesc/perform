@@ -227,7 +227,7 @@ export function analyseResult(fixture: DemoResultFixture): AnalysedResult {
         variable: fixture.variable,
         statement: `For ${fixture.audienceScope.toLowerCase()}, ${direction.statement.replace(" in this test", "")}`,
         createdAt: fixture.observation.evaluatedAt,
-        provenance: "DEMO",
+        provenance: fixture.provenance ?? "DEMO",
       }
     : undefined;
   return {

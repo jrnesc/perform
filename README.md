@@ -109,7 +109,7 @@ Any non-terminal state can also move to `INVALID` (for example, a creator cancel
 | Numbers that agree | Reconciliation compares webhook totals with Fanvue's earnings ledger and its own per-message purchase totals, flags missing assignments, orphan refunds and unreadable rows, and appends an immutable snapshot. |
 | Honest close | Close lists every blocker (window still open, reconciliation missing, incomplete or mismatched). Only then does it delete both lists and freeze metrics; list deletions are journaled, so a retry is safe. |
 | Nothing goes live by accident | `PERFORM_WRITE_MODE` must be `enabled`, and each live capability must be configured, granted by OAuth scope and verified against Fanvue's contract, recorded in append-only tables. Since ADR 0022 a verified capability is active for every installed creator unless that creator is switched off. Every Fanvue write, including cancellation, passes the same gate. |
-| Honest results | Results use exact assigned denominators and settled revenue net of refunds. Copy tests use a Beta-Binomial posterior over distinct converted fans; price tests use a fixed-seed bootstrap of revenue per recipient. A direction counts as dependable only at 95% and above a minimum volume, and small cohorts are suppressed. Live experiments currently show descriptive counts without that analysis (see Known limits). |
+| Honest results | Results use exact assigned denominators and settled revenue net of refunds. Copy tests use a Beta-Binomial posterior over distinct converted fans; price tests use a fixed-seed bootstrap of revenue per recipient. A direction counts as dependable only at 95% and above a minimum volume, and small cohorts are suppressed. Live experiments run the same analysis and gates; a verdict appears only once the experiment is closed on a complete reconciliation. |
 
 ## Stack
 
@@ -163,7 +163,7 @@ Deployed at `https://perform-fanvue.augur-2f4.workers.dev`. The first real exper
 ### Known limits and next steps
 
 - **Launch runs inside one request.** Provisioning and sending happen in the user's HTTP request. At large audiences (about 1,000 list batches per 100k fans) this should move to Cloudflare Queues or Workflows, with the route only enqueuing and each step retried with backoff and `Retry-After` handling.
-- **Live results are descriptive.** Real experiments show counts and rates per arm; the Bayesian analysis and evidence gates run on seeded results only. Closed results are recomputed from stored evidence rather than snapshotted at close, so a late refund can still change them.
+- **Closed results are not snapshotted.** Live results are recomputed from stored evidence on each read, so a refund that arrives after close can still change a final result. Snapshotting per-arm metrics at close would fix it.
 - **Reconciliation can block close.** The per-message check compares against Fanvue's lifetime totals, so purchases after the window can block close. It needs a tolerance or should become a warning.
 - **Sessions.** The SDK session token carries the Fanvue tokens for its lifetime. Production would keep them server-side, encrypted, behind a short-lived session.
 - **Operations.** Scheduled reconciliation, a sweeper for stuck states, alerting for failed or missing webhooks, an operator tool to resolve operator review, and webhook secret rotation.

@@ -32,7 +32,7 @@ type DatabaseExperiment = RealExperiment & { workspace: "real" | "demo" };
 /** The REAL Results read for one experiment: its per-member evidence, or why it is not available. */
 export type LiveResults =
   | { status: "loading" }
-  | { status: "available"; breakdown: LiveAudienceBreakdown }
+  | { status: "available"; breakdown: LiveAudienceBreakdown; analysis: AnalysedResult | null }
   | { status: "unavailable"; message: string };
 
 export type LifecycleOutcome = { ok: true; message: string } | { ok: false; reasons: readonly string[] };
@@ -341,10 +341,18 @@ function ArmCards({ result }: { result: AnalysedResult }) {
 }
 
 /**
- * Live results for a REAL experiment: per-arm totals counted from the same per-member evidence the
- * cohort panel uses. No significance claim is made here; the seeded analysis model is fixture-only.
+ * Live results for a REAL experiment: the same verdict, uncertainty and evidence gates as the seeded
+ * results, then per-arm totals counted from the per-member evidence the cohort panel uses.
  */
-function LiveResultsSection({ breakdown, closed }: { breakdown: LiveAudienceBreakdown; closed: boolean }) {
+function LiveResultsSection({
+  breakdown,
+  analysis,
+  closed,
+}: {
+  breakdown: LiveAudienceBreakdown;
+  analysis: AnalysedResult | null;
+  closed: boolean;
+}) {
   const arms = (["A", "B"] as const).map((arm) => {
     const rows = breakdown.evidence.filter((row) => row.arm === arm);
     return {
@@ -358,6 +366,7 @@ function LiveResultsSection({ breakdown, closed }: { breakdown: LiveAudienceBrea
   const purchases = arms.reduce((sum, arm) => sum + arm.converted, 0);
   return (
     <div className={styles.detailFlow}>
+      {analysis && <ResultHeadline result={analysis} />}
       <section className="detail-section" aria-labelledby="live-results-title">
         <div className={styles.sectionHeading}>
           <h2 id="live-results-title" className="section-title">
@@ -368,7 +377,7 @@ function LiveResultsSection({ breakdown, closed }: { breakdown: LiveAudienceBrea
         <p className={styles.sectionNote}>
           {purchases === 0
             ? "No attributed purchases yet. Counts update as payment webhooks and reconciliations arrive."
-            : "Counts of fans who bought after assignment, by the arm they were assigned to. Small live samples are descriptive, not a winner."}
+            : "Counts of fans who bought after assignment, by the arm they were assigned to."}
         </p>
         <div className={styles.armCards}>
           {arms.map((value) => (
@@ -410,6 +419,7 @@ function LiveResultsSection({ breakdown, closed }: { breakdown: LiveAudienceBrea
           </p>
         )}
       </section>
+      {analysis && <UncertaintyChart result={analysis} />}
       <AudienceEvidencePanel evidence={breakdown.evidence} caveat={breakdown.caveat} />
     </div>
   );
@@ -571,7 +581,11 @@ function ExperimentDetail({
           <AudienceEvidencePanel evidence={result.fixture.audienceEvidence ?? []} />
         </div>
       ) : live && launch && liveResults?.status === "available" ? (
-        <LiveResultsSection breakdown={liveResults.breakdown} closed={experiment.state === "CLOSED"} />
+        <LiveResultsSection
+          breakdown={liveResults.breakdown}
+          analysis={liveResults.analysis}
+          closed={experiment.state === "CLOSED"}
+        />
       ) : live && launch && liveResults?.status === "loading" ? (
         <div className={styles.resultEmpty} role="status" aria-busy="true">
           <h2>Loading live results…</h2>
@@ -1074,7 +1088,7 @@ export function ExperimentHistory({
                 </table>
                 {(preview || view === "seeded") && (
                   <p className={styles.fixtureNote}>
-                    <span className={styles.fixtureLabel}>Seeded demo</span> Five fixtures cover a clear winner, a clear
+                    <span className={styles.fixtureLabel}>Demo</span> Five fixtures cover a clear winner, a clear
                     no-difference, a running test and blocked launches. Newly saved preview tests appear here too.
                   </p>
                 )}
@@ -1151,9 +1165,11 @@ function RealHistory({ selectedId }: { selectedId?: string }) {
       .then(async (response): Promise<LiveResults> => {
         const body = (await response.json().catch(() => ({}))) as {
           breakdown?: LiveAudienceBreakdown;
+          analysis?: AnalysedResult | null;
           error?: { code?: string };
         };
-        if (response.ok && body.breakdown) return { status: "available", breakdown: body.breakdown };
+        if (response.ok && body.breakdown)
+          return { status: "available", breakdown: body.breakdown, analysis: body.analysis ?? null };
         return {
           status: "unavailable",
           message:

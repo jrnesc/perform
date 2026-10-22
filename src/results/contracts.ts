@@ -64,7 +64,9 @@ export type EvidenceEvent = {
 export type DemoResultFixture = {
   id: string;
   experimentId: string;
-  fixtureVersion: "perform-demo-results-v1";
+  fixtureVersion: "perform-demo-results-v1" | "perform-live-v1";
+  /** Seeded fixtures are DEMO; a live experiment analysed through the same gates is REAL. */
+  provenance?: "DEMO" | "REAL";
   title: string;
   audienceScope: string;
   sourceAudienceUuid: string;
@@ -159,7 +161,7 @@ export type AudienceLearning = {
   variable: ExperimentVariable;
   statement: string;
   createdAt: string;
-  provenance: "DEMO";
+  provenance: "DEMO" | "REAL";
 };
 
 export type AnalysedResult = {

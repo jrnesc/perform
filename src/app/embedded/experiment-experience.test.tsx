@@ -117,7 +117,7 @@ describe("Experiment dashboard", () => {
         preview={false}
         selectedId="real-1"
         realExperiments={real}
-        liveResults={{ status: "available", breakdown }}
+        liveResults={{ status: "available", breakdown, analysis: null }}
       />,
     );
     expect(screen.getByRole("heading", { name: "Results so far" })).not.toBeNull();
@@ -131,10 +131,11 @@ describe("Experiment dashboard", () => {
         preview={false}
         selectedId="real-1"
         realExperiments={[{ ...real[0], state: "CLOSED" }]}
-        liveResults={{ status: "available", breakdown }}
+        liveResults={{ status: "available", breakdown, analysis: analyseResult(DEMO_RESULT_FIXTURES[0]) }}
       />,
     );
     expect(screen.getByRole("heading", { name: "Final result" })).not.toBeNull();
+    expect(screen.getByText(/chance Arm B is genuinely better/)).not.toBeNull();
     expect(screen.getByText("Live · frozen at close")).not.toBeNull();
     cleanup();
     render(
