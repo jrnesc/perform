@@ -14,7 +14,7 @@ import {
 const signingSecret = "fixture-signing-secret";
 const timestampSeconds = 1_792_497_600;
 const nowMs = timestampSeconds * 1000;
-const config: WebhookConfig = { enabled: true, signingSecret, creatorUuid };
+const config: WebhookConfig = { enabled: true, signingSecret };
 
 async function sign(body: Record<string, unknown>, secret = signingSecret) {
   const rawBody = new TextEncoder().encode(JSON.stringify(body));
@@ -31,11 +31,11 @@ const payment = (id: string, fan: string, message: string, overrides: Record<str
     creator: { uuid: creator }, ...overrides,
   },
 });
-const refund = (id: string, paymentId: string, overrides: Record<string, unknown> = {}) => ({
+const refund = (id: string, paymentId: string, overrides: Record<string, unknown> = {}, creator = creatorUuid) => ({
   id: `event-${id}`, type: "creator.refund.created", timestamp: "2026-10-20T12:05:00.000Z",
   data: {
     object: "refund", id, payment_id: paymentId, full_amount: true, amount: 1200, currency: "USD",
-    created_at: "2026-10-20T12:05:00.000Z", creator: { uuid: creatorUuid }, ...overrides,
+    created_at: "2026-10-20T12:05:00.000Z", creator: { uuid: creator }, ...overrides,
   },
 });
 
@@ -60,7 +60,8 @@ async function setup() {
     const signed = await sign(body, options.secret);
     return receiveCreatorCommerceWebhook({
       rawBody: signed.rawBody, signature: signed.signature, nowMs,
-      config: options.cfg ?? config, repository: options.repo ?? store, newId: () => `dead-${++ids}`,
+      config: options.cfg ?? config, newId: () => `dead-${++ids}`,
+      repositoryFor: (creator) => options.repo ?? new D1LiveEvidenceRepository(db, creator, "REAL"),
     });
   };
   const count = (sql: string) => (sqlite.prepare(sql).get() as { n: number }).n;
@@ -89,7 +90,7 @@ describe("creator commerce webhook receiver", () => {
       .toEqual({ status: 401, outcome: "INVALID_SIGNATURE" });
     const signed = await sign(payment("p", "fan-1", "message-a"));
     expect(await receiveCreatorCommerceWebhook({
-      rawBody: signed.rawBody, signature: null, nowMs, config, repository: ctx.store, newId: () => "x",
+      rawBody: signed.rawBody, signature: null, nowMs, config, repositoryFor: () => ctx.store, newId: () => "x",
     })).toEqual({ status: 401, outcome: "INVALID_SIGNATURE" });
     expect(ctx.count("SELECT count(*) AS n FROM commerce_events")).toBe(0);
     expect(ctx.count("SELECT count(*) AS n FROM commerce_dead_letters")).toBe(0);
@@ -123,7 +124,7 @@ describe("creator commerce webhook receiver", () => {
   it("answers the unsigned verification probe, and only that, without storing anything", async () => {
     const probe = new TextEncoder().encode(JSON.stringify({ type: "fanvue.webhook.verification", timestamp: "2026-10-20T12:00:00.000Z" }));
     const receiveUnsigned = (rawBody: Uint8Array) => receiveCreatorCommerceWebhook({
-      rawBody, signature: null, nowMs, config, repository: ctx.store, newId: () => "x",
+      rawBody, signature: null, nowMs, config, repositoryFor: () => ctx.store, newId: () => "x",
     });
     expect(await receiveUnsigned(probe)).toEqual({ status: 200, outcome: "VERIFICATION" });
     expect(await receiveUnsigned(new TextEncoder().encode(JSON.stringify(payment("p", "fan-1", "message-a")))))
@@ -131,11 +132,11 @@ describe("creator commerce webhook receiver", () => {
     expect(await receiveUnsigned(new TextEncoder().encode("not json"))).toEqual({ status: 401, outcome: "INVALID_SIGNATURE" });
     // Fanvue reveals the signing secret only after creating and probing the destination.
     expect(await receiveCreatorCommerceWebhook({
-      rawBody: probe, signature: null, nowMs, config: { ...config, signingSecret: undefined }, repository: ctx.store, newId: () => "x",
+      rawBody: probe, signature: null, nowMs, config: { ...config, signingSecret: undefined }, repositoryFor: () => ctx.store, newId: () => "x",
     })).toEqual({ status: 200, outcome: "VERIFICATION" });
     // Fanvue reveals the signing secret only after creating and probing the destination.
     expect(await receiveCreatorCommerceWebhook({
-      rawBody: probe, signature: null, nowMs, config: { ...config, signingSecret: undefined }, repository: ctx.store, newId: () => "x",
+      rawBody: probe, signature: null, nowMs, config: { ...config, signingSecret: undefined }, repositoryFor: () => ctx.store, newId: () => "x",
     })).toEqual({ status: 200, outcome: "VERIFICATION" });
     expect(ctx.count("SELECT count(*) AS n FROM commerce_events")).toBe(0);
     expect(ctx.count("SELECT count(*) AS n FROM commerce_dead_letters")).toBe(0);
@@ -209,12 +210,16 @@ describe("creator commerce webhook receiver", () => {
     expect(ctx.sqlite.prepare("SELECT gross_minor FROM commerce_events").get()).toEqual({ gross_minor: 1200 });
   });
 
-  it("acknowledges but dead-letters a signed event for another creator", async () => {
+  it("stores each signed event in the scope of the creator it names", async () => {
+    // Another creator's purchase cannot match this creator's experiments, so nothing is kept for it.
     expect(await ctx.receive(payment("p", "fan-1", "message-a", {}, "someone-else")))
-      .toEqual({ status: 200, outcome: "DEAD_LETTERED" });
-    expect(ctx.sqlite.prepare("SELECT reason, event_id FROM commerce_dead_letters").get())
-      .toEqual({ reason: "WRONG_CREATOR", event_id: "event-p" });
+      .toEqual({ status: 200, outcome: "UNRELATED" });
     expect(ctx.count("SELECT count(*) AS n FROM commerce_events")).toBe(0);
+    expect(ctx.count("SELECT count(*) AS n FROM commerce_dead_letters")).toBe(0);
+    // A reversal is kept under the creator its payload names, never under this creator.
+    expect(await ctx.receive(refund("r", "p", {}, "someone-else"))).toEqual({ status: 200, outcome: "RECORDED" });
+    expect(ctx.sqlite.prepare("SELECT creator_uuid FROM commerce_events").all()).toEqual([{ creator_uuid: "someone-else" }]);
+    expect(await ctx.store.listCommerceEvents(ctx.experimentId)).toEqual([]);
   });
 
   it("keeps a purchase with no frozen assignment auditable but out of the results", async () => {

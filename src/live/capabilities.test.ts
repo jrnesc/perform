@@ -15,10 +15,10 @@ describe("live capability states", () => {
     expect(report.audience_discovery).toMatchObject({ state: "fixture_backed", missingConfiguredScopes: ["read:fan"] });
   });
 
-  it("needs the webhook secret and creator for the commerce webhook", () => {
+  it("needs the webhook signing secret for the commerce webhook", () => {
     const env = { PERFORM_LIVE_CAPABILITIES: "commerce_webhook", OAUTH_SCOPES: "read:creator" };
     expect(states({ env }).commerce_webhook).toBe("fixture_backed");
-    expect(states({ env: { ...env, FANVUE_WEBHOOK_SIGNING_SECRET: "s", PERFORM_LIVE_CREATOR_UUID: "c" } }).commerce_webhook)
+    expect(states({ env: { ...env, FANVUE_WEBHOOK_SIGNING_SECRET: "s" } }).commerce_webhook)
       .toBe("configured");
   });
 

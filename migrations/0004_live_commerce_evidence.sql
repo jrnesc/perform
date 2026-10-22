@@ -152,11 +152,11 @@ CREATE TABLE capability_activations (
     'earnings_reconciliation', 'mass_message_totals', 'send'
   )),
   action TEXT NOT NULL CHECK (action IN ('ACTIVATE', 'DEACTIVATE')),
-  verification_id TEXT NOT NULL,
+  -- Activation is self-service (ADR 0022): a per-creator decision may cite the verification it
+  -- relied on, but switching one creator off needs none.
+  verification_id TEXT REFERENCES capability_verifications(id),
   decision_note TEXT NOT NULL CHECK (length(trim(decision_note)) > 0),
-  recorded_at TEXT NOT NULL,
-  FOREIGN KEY (verification_id, creator_uuid, capability)
-    REFERENCES capability_verifications(id, creator_uuid, capability)
+  recorded_at TEXT NOT NULL
 ) STRICT;
 
 CREATE INDEX capability_activations_creator_capability

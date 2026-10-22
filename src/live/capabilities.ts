@@ -48,7 +48,8 @@ function words(value: string | undefined, separator: RegExp): Set<string> {
 
 /**
  * `grantedScopes` must come from a verified session grant, `verified` from a recorded Phase X
- * result and `activated` from an explicit owner decision. The health route passes none of them.
+ * result and `activated` from the creator's activation state (self-service unless switched off,
+ * ADR 0022). The health route passes none of them.
  */
 export function deriveCapabilityStates(input: {
   env: CapabilityEnvironment;
@@ -66,8 +67,7 @@ export function deriveCapabilityStates(input: {
   for (const id of liveCapabilityIds) {
     const scopes = requiredScopes[id];
     const missingConfiguredScopes = scopes.filter((scope) => !configuredScopes.has(scope));
-    const webhookReady = id !== "commerce_webhook" ||
-      Boolean(input.env.FANVUE_WEBHOOK_SIGNING_SECRET && input.env.PERFORM_LIVE_CREATOR_UUID);
+    const webhookReady = id !== "commerce_webhook" || Boolean(input.env.FANVUE_WEBHOOK_SIGNING_SECRET);
     let state: CapabilityState = "fixture_backed";
     if (enabled.has(id) && missingConfiguredScopes.length === 0 && webhookReady) {
       state = "configured";

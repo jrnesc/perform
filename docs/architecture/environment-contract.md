@@ -32,8 +32,10 @@ Every live capability is derived from four independent facts:
 1. it is named in `PERFORM_LIVE_CAPABILITIES` and its required scopes are in
    `OAUTH_SCOPES`;
 2. those scopes are present on the verified session grant;
-3. an append-only Phase X verification records `PASS`; and
-4. an append-only owner activation records `ACTIVATE` after that verification.
+3. the latest append-only Phase X verification of the capability, recorded for
+   any creator, is `PASS` (verification describes Fanvue's contract); and
+4. the creator's own latest activation decision is not `DEACTIVATE`
+   (activation is self-service, ADR 0022).
 
 The resulting states are:
 
@@ -76,11 +78,12 @@ write switch.
 
 `POST /api/webhooks/fanvue` is available only when:
 
-- `PERFORM_LIVE_COMMERCE_WEBHOOK_ENABLED` is exactly `true`;
-- `PERFORM_LIVE_CREATOR_UUID` identifies the creator boundary; and
+- `PERFORM_LIVE_COMMERCE_WEBHOOK_ENABLED` is exactly `true`; and
 - `FANVUE_WEBHOOK_SIGNING_SECRET` is present as a Worker secret.
 
-The receiver uses only `PERFORM_REAL_DB`. It verifies exact raw bytes before
+The receiver uses only `PERFORM_REAL_DB` and stores each signed event in the
+scope of the creator its payload names (ADR 0022). `PERFORM_LIVE_CREATOR_UUID`
+now only scopes the operator evidence route. It verifies exact raw bytes before
 parsing and never reports secrets from health or operator routes.
 
 ## Configuration

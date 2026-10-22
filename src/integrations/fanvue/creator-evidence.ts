@@ -214,7 +214,8 @@ export async function verifyAndParseCreatorEvidence(input: {
   rawBody: Uint8Array;
   signature: string;
   signingSecret: string;
-  expectedCreatorUuid: string;
+  /** When set, a signed event for any other creator is refused; when absent, each event names its creator. */
+  expectedCreatorUuid?: string;
   nowMs: number;
 }): Promise<CreatorEvidenceParseResult> {
   const verified = await verifyWebhookHmac({
@@ -241,7 +242,7 @@ export async function verifyAndParseCreatorEvidence(input: {
     ? parsePayment(envelope)
     : parseReversal(envelope);
   if (!event) return { accepted: false, reason: "INVALID_PAYLOAD" };
-  if (event.creatorUuid !== input.expectedCreatorUuid) {
+  if (input.expectedCreatorUuid !== undefined && event.creatorUuid !== input.expectedCreatorUuid) {
     return { accepted: false, reason: "WRONG_CREATOR" };
   }
   return { accepted: true, event, payloadHash: await sha256(input.rawBody) };

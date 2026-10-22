@@ -9,7 +9,6 @@ export type WebhookConfig = {
   /** Explicit activation. Absent or false means the receiver does not exist. */
   enabled: boolean;
   signingSecret: string | undefined;
-  creatorUuid: string | undefined;
 };
 
 export type WebhookOutcome =
@@ -47,11 +46,25 @@ function bestEffortEventId(rawBody: Uint8Array): string | null {
   }
 }
 
+/** Dead letters for an unparseable event are filed under the creator it names, when it names one. */
+export const unknownCreatorUuid = "unknown";
+
+function bestEffortCreatorUuid(rawBody: Uint8Array): string {
+  try {
+    const uuid = (JSON.parse(new TextDecoder().decode(rawBody)) as { data?: { creator?: { uuid?: unknown } } })
+      .data?.creator?.uuid;
+    return typeof uuid === "string" && uuid.trim() ? uuid : unknownCreatorUuid;
+  } catch {
+    return unknownCreatorUuid;
+  }
+}
+
 /**
  * Framework-free receiver for creator payment/refund/dispute deliveries.
  *
- * Order matters: activation, the unsigned verification probe, exact-raw-byte signature,
- * creator scope, then attribution by the selected strategy (ADR 0015). Delivery is at-least-once and
+ * Order matters: activation, the unsigned verification probe, exact-raw-byte signature, then
+ * attribution by the selected strategy (ADR 0015). One app-wide destination serves every creator, so
+ * each event is stored in the scope of the creator its signed payload names (ADR 0022). Delivery is at-least-once and
  * unordered, so everything is idempotent. Fanvue treats any non-2xx as a failed delivery, retries
  * it and can auto-disable the destination, so only a bad signature and a storage failure are
  * non-2xx. Anything durably captured, including dead letters, is acknowledged with 200.
@@ -61,18 +74,19 @@ export async function receiveCreatorCommerceWebhook(input: {
   signature: string | null;
   nowMs: number;
   config: WebhookConfig;
-  repository: LiveEvidenceRepository;
+  /** The evidence store scoped to one creator. */
+  repositoryFor: (creatorUuid: string) => LiveEvidenceRepository;
   newId: () => string;
   /** Defaults to assignment and send window; message-UUID matching needs a proven real send. */
   attribution?: PurchaseAttributionStrategy;
 }): Promise<WebhookResult> {
-  const { config, repository } = input;
+  const { config } = input;
   if (!config.enabled) return result(404, "DISABLED");
   // The verification probe is the only unsigned request Fanvue sends. It carries no data, so
   // acknowledging it stores nothing, and it must be answered before the secret exists: Fanvue
   // only reveals the signing secret once the destination has been created and probed.
   if (!input.signature && isVerificationProbe(input.rawBody)) return result(200, "VERIFICATION");
-  if (!config.signingSecret || !config.creatorUuid) return result(503, "NOT_CONFIGURED");
+  if (!config.signingSecret) return result(503, "NOT_CONFIGURED");
   if (!input.signature) return result(401, "INVALID_SIGNATURE");
 
   const receivedAt = new Date(input.nowMs).toISOString();
@@ -80,10 +94,10 @@ export async function receiveCreatorCommerceWebhook(input: {
     rawBody: input.rawBody,
     signature: input.signature,
     signingSecret: config.signingSecret,
-    expectedCreatorUuid: config.creatorUuid,
     nowMs: input.nowMs,
   });
 
+  const repository = input.repositoryFor(parsed.accepted ? parsed.event.creatorUuid : bestEffortCreatorUuid(input.rawBody));
   const deadLetter = async (reason: DeadLetterReason, eventId: string | null, payloadHash: string, status: number) => {
     await repository.recordDeadLetter({ id: input.newId(), reason, eventId, payloadHash, receivedAt });
     return result(status, "DEAD_LETTERED");
@@ -94,7 +108,7 @@ export async function receiveCreatorCommerceWebhook(input: {
       if (parsed.reason === "INVALID_SIGNATURE") return result(401, "INVALID_SIGNATURE");
       // An authentic event type we do not handle is acknowledged without being kept.
       if (parsed.reason === "UNSUPPORTED_EVENT") return result(200, "UNRELATED");
-      // Authentic but unusable (unsupported shape, partial refund, wrong creator): acknowledge so
+      // Authentic but unusable (unsupported shape, partial refund): acknowledge so
       // Fanvue stops retrying, and keep a hash-only audit trail.
       return deadLetter(
         parsed.reason, bestEffortEventId(input.rawBody), await sha256(input.rawBody), 200,

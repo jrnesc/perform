@@ -84,7 +84,7 @@ async function launched() {
     const { value } = await signWebhookFixture({ payload: rawBody, signingSecret, timestampSeconds });
     return receiveCreatorCommerceWebhook({
       rawBody, signature: value, nowMs: timestampSeconds * 1000,
-      config: { enabled: true, signingSecret, creatorUuid }, repository: ctx.store,
+      config: { enabled: true, signingSecret }, repositoryFor: () => ctx.store,
       newId: () => `dead-${++ids}`, attribution: strategy,
     });
   };

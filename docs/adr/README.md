@@ -34,10 +34,11 @@ supersedes an old one rather than rewriting architectural history.
 | [0015](0015-attribute-purchases-by-assignment-and-send-window.md) | Accepted | Attribute purchases by frozen assignment and send window by default; message-UUID matching only after a real send proves it |
 | [0016](0016-seed-results-with-the-live-subscriber-cohorts.md) | Accepted | Seed Results with the five live subscriber cohorts so seeded and live evidence share one labelled contract |
 | [0017](0017-use-one-commerce-evidence-path.md) | Accepted | Use one stored commerce shape and projection for seeded and live Results |
-| [0018](0018-owner-written-capability-activation.md) | Accepted | Require owner-written Phase X evidence and activation decisions for live capabilities |
+| [0018](0018-owner-written-capability-activation.md) | Accepted, amended by 0022 | Require owner-written Phase X evidence and activation decisions for live capabilities |
 | [0019](0019-gate-real-sends-and-schedule-both-arms.md) | Accepted | Gate REAL writes, verify frozen lists and schedule both arms with immutable idempotency keys |
 | [0020](0020-observation-window-and-manual-close.md) | Accepted | Confirm an observation window at launch; reconcile and close by hand with every blocker named |
 | [0021](0021-recover-saved-and-interrupted-launches.md) | Accepted | Resume or discard saved experiments and safely abandon pre-send launch interruptions |
+| [0022](0022-open-perform-to-every-installed-creator.md) | Accepted | Treat verification as global, activate creators self-service and route webhook events by payload creator |
 
 ## Reading older decisions
 

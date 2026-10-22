@@ -12,7 +12,14 @@ function isCapability(value: string): value is LiveCapabilityId {
   return (liveCapabilityIds as readonly string[]).includes(value);
 }
 
-/** Read-only by design: owner-written Phase X evidence has no application write method. */
+/**
+ * Read-only by design: owner-written Phase X evidence has no application write method.
+ *
+ * Verification is a fact about Fanvue's contract, so the latest verification of a capability for
+ * any creator applies to every creator, and a later FAIL switches it off for all of them. Activation
+ * is self-service (ADR 0022): a verified capability is active for a creator unless that creator's
+ * latest activation decision is DEACTIVATE.
+ */
 export class D1CapabilityRecordReader {
   constructor(
     private readonly db: SqlDatabase,
@@ -20,26 +27,17 @@ export class D1CapabilityRecordReader {
   ) {}
 
   async snapshot(): Promise<CapabilityRecordSnapshot> {
-    const [verificationRows, activationRows] = await Promise.all([
+    const [verificationRows, deactivationRows] = await Promise.all([
       this.db.prepare(
         `SELECT v.capability, v.outcome AS value FROM capability_verifications v
-         WHERE v.creator_uuid = ? AND v.id = (
+         WHERE v.id = (
            SELECT latest.id FROM capability_verifications latest
-           WHERE latest.creator_uuid = v.creator_uuid AND latest.capability = v.capability
+           WHERE latest.capability = v.capability
            ORDER BY latest.recorded_at DESC, latest.id DESC LIMIT 1
          )`,
-      ).bind(this.creatorUuid).all<LatestRow>(),
+      ).all<LatestRow>(),
       this.db.prepare(
-        `SELECT a.capability,
-           CASE WHEN a.action = 'ACTIVATE' AND v.outcome = 'PASS' AND v.id = (
-             SELECT latest_verification.id FROM capability_verifications latest_verification
-             WHERE latest_verification.creator_uuid = a.creator_uuid
-               AND latest_verification.capability = a.capability
-             ORDER BY latest_verification.recorded_at DESC, latest_verification.id DESC LIMIT 1
-           ) THEN 'ACTIVATE' ELSE 'DEACTIVATE' END AS value
-         FROM capability_activations a
-         JOIN capability_verifications v ON v.id = a.verification_id
-           AND v.creator_uuid = a.creator_uuid AND v.capability = a.capability
+        `SELECT a.capability, a.action AS value FROM capability_activations a
          WHERE a.creator_uuid = ? AND a.id = (
            SELECT latest.id FROM capability_activations latest
            WHERE latest.creator_uuid = a.creator_uuid AND latest.capability = a.capability
@@ -47,13 +45,12 @@ export class D1CapabilityRecordReader {
          )`,
       ).bind(this.creatorUuid).all<LatestRow>(),
     ]);
-    return {
-      verified: (verificationRows.results ?? [])
-        .filter((row) => row.value === "PASS" && isCapability(row.capability))
-        .map((row) => row.capability as LiveCapabilityId),
-      activated: (activationRows.results ?? [])
-        .filter((row) => row.value === "ACTIVATE" && isCapability(row.capability))
-        .map((row) => row.capability as LiveCapabilityId),
-    };
+    const verified = (verificationRows.results ?? [])
+      .filter((row) => row.value === "PASS" && isCapability(row.capability))
+      .map((row) => row.capability as LiveCapabilityId);
+    const deactivated = new Set((deactivationRows.results ?? [])
+      .filter((row) => row.value === "DEACTIVATE")
+      .map((row) => row.capability));
+    return { verified, activated: verified.filter((capability) => !deactivated.has(capability)) };
   }
 }
