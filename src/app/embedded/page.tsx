@@ -9,7 +9,7 @@ import type { ExperimentVariable, VariantDefinition } from "../../domain/experim
 import type { AudienceSnapshot, DryRunPlan, ExperimentReview } from "../../experiments/contracts";
 import type { MediaAsset, MediaPage, WorkspaceKind } from "../../workspace/contracts";
 import { ProgressStrip, SectionIcon, StageIcon, WatchfulEyeIcon, WritingPenIcon } from "./experiment-experience";
-import { ExperimentHistory, previewHistoryStorageKey } from "./experiment-history";
+import { EmbeddedExperimentHistory, ExperimentHistory, previewHistoryStorageKey } from "./experiment-history";
 
 type WorkspaceResponse = {
   workspace: WorkspaceKind;
@@ -110,9 +110,11 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
   const [advancing, setAdvancing] = useState(false);
   const [launchConfirmed, setLaunchConfirmed] = useState(false);
   const [scheduledAt, setScheduledAt] = useState(() => {
-    const date = new Date(Date.now() + 5 * 60_000);
+    // datetime-local expects the user's local wall-clock time, not UTC.
+    const date = new Date(Date.now() + 10 * 60_000);
     date.setSeconds(0, 0);
-    return date.toISOString().slice(0, 16);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   });
   const [launch, setLaunch] = useState<LaunchResponse | null>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
@@ -273,6 +275,10 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
         return;
       }
       if (!launchConfirmed) return setValidation("Confirm that both paid messages and their exact effects are correct.");
+      const deliveryMs = new Date(scheduledAt).getTime();
+      if (!Number.isFinite(deliveryMs) || deliveryMs < Date.now() + 3 * 60_000) {
+        return setValidation("Choose a delivery time at least 3 minutes from now so both arms can be set up first.");
+      }
       try {
         setAdvancing(true);
         const response = await authFetch("/api/experiments/launch", {
@@ -398,12 +404,6 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
   );
 }
 
-/** The entry screen receives Fanvue's one-time `?token=`; exchanging it here stores the session for later screens. */
-function AuthenticatedHistory() {
-  useEmbeddedAuth();
-  return <ExperimentHistory preview={false} />;
-}
-
 let staleSessionChecked = false;
 
 /**
@@ -422,6 +422,6 @@ function discardStaleSession() {
 
 export default function EmbeddedPage({ preview = false, screen = "history" }: { preview?: boolean; screen?: "history" | "setup" }) {
   useState(discardStaleSession);
-  if (screen === "history") return preview ? <ExperimentHistory preview /> : <AuthProvider><AuthenticatedHistory /></AuthProvider>;
+  if (screen === "history") return preview ? <ExperimentHistory preview /> : <EmbeddedExperimentHistory />;
   return <AuthProvider><PerformWorkspace preview={preview} /></AuthProvider>;
 }

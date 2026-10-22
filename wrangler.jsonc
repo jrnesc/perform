@@ -27,7 +27,8 @@
     "OAUTH_SCOPES": "read:self read:media read:chat read:fan read:insights read:creator write:chat",
     "PERFORM_LIVE_CREATOR_UUID": "37cf7958-9d75-4330-a09d-3ecae7f179c3",
     "PERFORM_LIVE_COMMERCE_WEBHOOK_ENABLED": "true",
-    "PERFORM_LIVE_CAPABILITIES": "subscriber_state,purchase_enrichment,audience_discovery",
+    "PERFORM_LIVE_CAPABILITIES": "subscriber_state,purchase_enrichment,audience_discovery,send",
+    "PERFORM_WRITE_MODE": "enabled",
     "PERFORM_LIVE_COMMERCE_WEBHOOK_ENABLED": "true"
   },
   "observability": {

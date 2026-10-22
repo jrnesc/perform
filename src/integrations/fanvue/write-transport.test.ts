@@ -22,6 +22,26 @@ describe("Fanvue write transport", () => {
     }));
   });
 
+  it("reads Fanvue's { data, nextCursor } pages when verifying list members", async () => {
+    const pages = [
+      { data: [{ uuid: "fan-1" }, { user: { uuid: "fan-2" } }], nextCursor: "c2", total: null },
+      { data: [{ userUuid: "fan-3" }], nextCursor: null },
+    ];
+    const fetchImpl = vi.fn(async () => Response.json(pages.shift()));
+    const transport = createFanvueWriteTransport({ accessToken: "token", fetchImpl });
+    await expect(transport.listCustomListMembers("list-a")).resolves.toEqual(["fan-1", "fan-2", "fan-3"]);
+    expect(fetchImpl).toHaveBeenLastCalledWith(expect.stringContaining("?cursor=c2"), expect.anything());
+  });
+
+  it("finds a scheduled mass message by idempotency key in a { data } page", async () => {
+    const fetchImpl = vi.fn(async () => Response.json({
+      data: [{ uuid: "message-9", idempotencyKey: "experiment-1:B", recipientCount: 1 }], nextCursor: null,
+    }));
+    const transport = createFanvueWriteTransport({ accessToken: "token", fetchImpl });
+    await expect(transport.findMassMessageByIdempotencyKey("experiment-1:B"))
+      .resolves.toMatchObject({ uuid: "message-9", recipientCount: 1 });
+  });
+
   it.each([409, 429, 500, 503])("classifies HTTP %s as uncertain", async (status) => {
     const transport = createFanvueWriteTransport({
       accessToken: "token", fetchImpl: vi.fn(async () => new Response("no", { status })),

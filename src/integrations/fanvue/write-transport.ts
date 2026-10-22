@@ -76,6 +76,19 @@ async function fanvueError(response: Response): Promise<FanvueWriteError> {
   );
 }
 
+/** Fanvue cursor pages are `{ data: [...], nextCursor }`; older shapes nest the rows under a named key. */
+function pageOf(body: JsonObject, keys: readonly string[]): { rows: readonly unknown[]; next: string | null } {
+  const inner = Array.isArray(body.data) ? null : object(body.data ?? body);
+  const rows = Array.isArray(body.data)
+    ? body.data
+    : keys.map((key) => inner?.[key]).find((value) => Array.isArray(value)) ?? [];
+  const pagination = inner && typeof inner.pagination === "object" && inner.pagination
+    ? inner.pagination as JsonObject : {};
+  const candidates = [body.nextCursor, inner?.nextCursor, pagination.nextCursor];
+  const next = candidates.find((value): value is string => typeof value === "string" && value.length > 0);
+  return { rows, next: next ?? null };
+}
+
 export function createFanvueWriteTransport(input: {
   accessToken: string;
   fetchImpl?: typeof fetch;
@@ -126,16 +139,12 @@ export function createFanvueWriteTransport(input: {
       do {
         const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
         const body = object(await (await request(`/v1/chats/lists/custom/${encodeURIComponent(listUuid)}${query}`)).json());
-        const data = object(body.data ?? body);
-        const page = data.members ?? data.users ?? [];
-        if (!Array.isArray(page)) throw new FanvueWriteError("UNCERTAIN", null, "Fanvue returned unreadable list members");
+        const { rows: page, next } = pageOf(body, ["members", "users"]);
         for (const item of page) {
           const row = object(item);
-          members.push(requiredString(row.uuid ?? row.userUuid, "a member UUID"));
+          const user = typeof row.user === "object" && row.user ? row.user as JsonObject : {};
+          members.push(requiredString(row.uuid ?? row.userUuid ?? user.uuid, "a member UUID"));
         }
-        const next = typeof data.nextCursor === "string" ? data.nextCursor
-          : typeof object(data.pagination ?? {}).nextCursor === "string"
-            ? object(data.pagination ?? {}).nextCursor as string : null;
         if (next && seen.has(next)) throw new FanvueWriteError("UNCERTAIN", null, "Fanvue repeated a list cursor");
         if (next) seen.add(next);
         cursor = next;
@@ -168,9 +177,7 @@ export function createFanvueWriteTransport(input: {
       do {
         const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
         const body = object(await (await request(`/v1/chats/mass-messages${query}`)).json());
-        const data = object(body.data ?? body);
-        const rows = data.messages ?? data.items ?? [];
-        if (!Array.isArray(rows)) throw new FanvueWriteError("UNCERTAIN", null, "Fanvue returned unreadable mass messages");
+        const { rows, next } = pageOf(body, ["messages", "items"]);
         for (const item of rows) {
           const row = object(item);
           if (row.idempotencyKey === idempotencyKey) {
@@ -182,7 +189,6 @@ export function createFanvueWriteTransport(input: {
             };
           }
         }
-        const next = typeof data.nextCursor === "string" ? data.nextCursor : null;
         if (next && seen.has(next)) throw new FanvueWriteError("UNCERTAIN", null, "Fanvue repeated a message cursor");
         if (next) seen.add(next);
         cursor = next;

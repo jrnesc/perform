@@ -47,7 +47,7 @@ describe("Experiment dashboard", () => {
     expect(screen.queryByRole("heading", { name: "Lapsed" })).toBeNull();
     expect(screen.getByText(/subscribers list holds current subscribers only/)).not.toBeNull();
     expect(screen.getByText(/No display names, handles, email addresses/)).not.toBeNull();
-    expect(screen.getByRole("table", { name: /Privacy-conscious member audit/ })).not.toBeNull();
+    expect(screen.getByRole("table", { name: /Stable UUIDs and experiment evidence only/ })).not.toBeNull();
   });
 
   it("labels live cohorts as live, shows the attribution caveat and never mixes provenance", () => {
