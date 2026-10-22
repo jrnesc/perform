@@ -18,6 +18,7 @@ import type { AnalysedResult, AudienceMemberEvidence } from "../../results/contr
 import { DEMO_RESULT_FIXTURES } from "../../results/demo-results-v1";
 import { experimentResultDetail, experimentResultSummary } from "../../results/experiment-results";
 import { ResultHeadline, UncertaintyChart } from "./experiment-experience";
+import styles from "./experiment-history.module.css";
 
 /** An experiment from the creator's own database, with its launch and latest reconciliation when it has them. */
 export type RealExperiment = ExperimentRecord & {
@@ -100,15 +101,15 @@ export function AudienceEvidencePanel({ evidence, caveat }: { evidence: readonly
   const all = audienceSegments(evidence, dimension);
   const segments = dimension === "RELATIONSHIP" ? all.filter((segment) => segment.members.length > 0) : all;
   const absent = dimension === "RELATIONSHIP" ? all.filter((segment) => segment.members.length === 0).map((segment) => segment.label.toLowerCase()) : [];
-  return <section className="audience-breakdown" aria-labelledby="audience-breakdown-title">
-    <header><div><div className="section-heading"><h2 id="audience-breakdown-title" className="section-title">Who converted and reversed?</h2><span className={live ? "provenance-live" : "fixture-label"}>{live ? "Live Fanvue evidence" : "Seeded demo · not live"}</span></div><p>New buyer means no settled purchase before assignment; returning buyer means at least one. Subscriber relationship is frozen before assignment from subscription history and renewal status. These cohorts describe this test and do not identify subgroup winners.</p></div><div className="breakdown-controls" aria-label="Audience breakdown"><button type="button" className={dimension === "PRIOR_PURCHASER" ? "active" : ""} aria-pressed={dimension === "PRIOR_PURCHASER"} onClick={() => setDimension("PRIOR_PURCHASER")}>Prior-purchaser status</button><button type="button" className={dimension === "RELATIONSHIP" ? "active" : ""} aria-pressed={dimension === "RELATIONSHIP"} onClick={() => setDimension("RELATIONSHIP")}>Subscriber relationship</button></div></header>
-    <table className="segment-table"><caption className="sr-only">Purchases by audience segment and arm</caption><thead><tr><th scope="col">Segment</th><th scope="col"><i className="arm-a" aria-hidden="true" />Arm A</th><th scope="col"><i className="arm-b" aria-hidden="true" />Arm B</th></tr></thead><tbody>{segments.map((segment) => <tr key={segment.key}><th scope="row">{segment.label}<small>{segment.members.length} assigned</small></th>{segment.isSmall ? <td colSpan={2} className="segment-suppressed">Hidden: fewer than 5 assigned members</td> : (["A", "B"] as const).map((arm) => { const value = segment.arms[arm]; return <td key={arm}><strong>{value.converted} of {value.assigned}</strong> bought<small>{money(value.settledRevenueMinor)} settled · {value.reversedPurchases} reversed</small></td>; })}</tr>)}</tbody></table>
-    {absent.length > 0 && <p className="privacy-note">{absent.length === 2 && absent.includes("never subscribed") && absent.includes("lapsed") ? absentRelationshipNote : `No members in: ${absent.join(", ")}.`}</p>}
-    {caveat && <p className="result-warning">{caveat}</p>}
-    <details className="member-audit"><summary><span>Member audit</span><small>{evidence.length} {evidence.length === 1 ? "fan" : "fans"} · privacy-conscious</small></summary>
-    <div className="evidence-table-wrap"><table className="history-table evidence-table"><caption>Stable UUIDs and experiment evidence only</caption><thead><tr><th scope="col">Fan UUID</th><th scope="col">Arm</th><th scope="col">Buyer definition</th><th scope="col">Subscriber relationship</th><th scope="col">Outcome</th><th scope="col">Settled value</th><th scope="col">Reversal</th></tr></thead><tbody>{evidence.map((row) => <tr key={row.fanUuid}><th scope="row"><code>{row.fanUuid}</code></th><td>{row.arm}</td><td>{row.priorPurchaserStatus === "PRIOR_PURCHASER" ? `Returning · ${row.priorSettledPurchaseCount} prior` : "New · 0 prior"}</td><td>{relationshipLabel(row.subscriberRelationship)}{row.resubscribedAfterLapse ? " · resubscribed" : ""}</td><td>{row.converted ? "Converted" : "No purchase"}</td><td>{money(row.settledRevenueMinor)}</td><td>{row.disputed ? "Disputed" : row.fullyRefunded ? "Fully refunded" : "None"}</td></tr>)}</tbody></table></div>
+  return <section className={styles.audienceBreakdown} aria-labelledby="audience-breakdown-title">
+    <header><div><div className={styles.sectionHeading}><h2 id="audience-breakdown-title" className="section-title">Who converted and reversed?</h2><span className={live ? styles.provenanceLive : styles.fixtureLabel}>{live ? "Live Fanvue evidence" : "Seeded demo · not live"}</span></div><p>New buyer means no settled purchase before assignment; returning buyer means at least one. Subscriber relationship is frozen before assignment from subscription history and renewal status. These cohorts describe this test and do not identify subgroup winners.</p></div><div className={styles.breakdownControls} aria-label="Audience breakdown"><button type="button" className={dimension === "PRIOR_PURCHASER" ? "active" : ""} aria-pressed={dimension === "PRIOR_PURCHASER"} onClick={() => setDimension("PRIOR_PURCHASER")}>Prior-purchaser status</button><button type="button" className={dimension === "RELATIONSHIP" ? "active" : ""} aria-pressed={dimension === "RELATIONSHIP"} onClick={() => setDimension("RELATIONSHIP")}>Subscriber relationship</button></div></header>
+    <table className={styles.segmentTable}><caption className="sr-only">Purchases by audience segment and arm</caption><thead><tr><th scope="col">Segment</th><th scope="col"><i className={styles.armA} aria-hidden="true" />Arm A</th><th scope="col"><i className={styles.armB} aria-hidden="true" />Arm B</th></tr></thead><tbody>{segments.map((segment) => <tr key={segment.key}><th scope="row">{segment.label}<small>{segment.members.length} assigned</small></th>{segment.isSmall ? <td colSpan={2} className={styles.segmentSuppressed}>Hidden: fewer than 5 assigned members</td> : (["A", "B"] as const).map((arm) => { const value = segment.arms[arm]; return <td key={arm}><strong>{value.converted} of {value.assigned}</strong> bought<small>{money(value.settledRevenueMinor)} settled · {value.reversedPurchases} reversed</small></td>; })}</tr>)}</tbody></table>
+    {absent.length > 0 && <p className={styles.privacyNote}>{absent.length === 2 && absent.includes("never subscribed") && absent.includes("lapsed") ? absentRelationshipNote : `No members in: ${absent.join(", ")}.`}</p>}
+    {caveat && <p className={styles.resultWarning}>{caveat}</p>}
+    <details className={styles.memberAudit}><summary><span>Member audit</span><small>{evidence.length} {evidence.length === 1 ? "fan" : "fans"} · privacy-conscious</small></summary>
+    <div className="evidence-table-wrap"><table className={`${styles.historyTable} evidence-table`}><caption>Stable UUIDs and experiment evidence only</caption><thead><tr><th scope="col">Fan UUID</th><th scope="col">Arm</th><th scope="col">Buyer definition</th><th scope="col">Subscriber relationship</th><th scope="col">Outcome</th><th scope="col">Settled value</th><th scope="col">Reversal</th></tr></thead><tbody>{evidence.map((row) => <tr key={row.fanUuid}><th scope="row"><code>{row.fanUuid}</code></th><td>{row.arm}</td><td>{row.priorPurchaserStatus === "PRIOR_PURCHASER" ? `Returning · ${row.priorSettledPurchaseCount} prior` : "New · 0 prior"}</td><td>{relationshipLabel(row.subscriberRelationship)}{row.resubscribedAfterLapse ? " · resubscribed" : ""}</td><td>{row.converted ? "Converted" : "No purchase"}</td><td>{money(row.settledRevenueMinor)}</td><td>{row.disputed ? "Disputed" : row.fullyRefunded ? "Fully refunded" : "None"}</td></tr>)}</tbody></table></div>
     </details>
-    <p className="privacy-note">No display names, handles, email addresses or profile fields are stored or shown. Segment differences are descriptive, not individual-fan causal conclusions.</p>
+    <p className={styles.privacyNote}>No display names, handles, email addresses or profile fields are stored or shown. Segment differences are descriptive, not individual-fan causal conclusions.</p>
   </section>;
 }
 
@@ -120,17 +121,17 @@ function ArmCards({ result }: { result: AnalysedResult }) {
   const shared = variable === "COPY" ? `Same price for both arms: ${money(variants[0].priceMinor)}.` : `Same message for both arms: “${variants[0].copy}”`;
   return <section className="detail-section" aria-labelledby="arms-title">
     <h2 id="arms-title" className="section-title">What was tested</h2>
-    <p className="section-note">{shared}</p>
-    <div className="arm-cards">{variants.map((variant) => {
+    <p className={styles.sectionNote}>{shared}</p>
+    <div className={styles.armCards}>{variants.map((variant) => {
       const value = result.arms[variant.arm];
-      return <article key={variant.arm} className={`arm-card ${winner === variant.arm ? "winner" : ""}`}>
-        <header><span className="arm-name"><i className={`arm-${variant.arm.toLowerCase()}`} aria-hidden="true" />Arm {variant.arm} <span>· {comparison[variant.arm === "A" ? "armALabel" : "armBLabel"]}</span></span>{winner === variant.arm && <span className="winner-pill">Performed better</span>}</header>
-        {variable === "COPY" ? <p className="arm-variable">“{variant.copy}”</p> : <p className="arm-variable arm-price">{money(variant.priceMinor)} <span>price</span></p>}
-        <div className="arm-outcome"><strong>{variable === "COPY" ? percentage(value.primaryRate) : money(value.primaryRate)}</strong><span>{variable === "COPY" ? "purchase rate" : "settled revenue per recipient"}</span></div>
+      return <article key={variant.arm} className={`${styles.armCard} ${winner === variant.arm ? styles.winner : ""}`}>
+        <header><span className={styles.armName}><i className={variant.arm === "A" ? styles.armA : styles.armB} aria-hidden="true" />Arm {variant.arm} <span>· {comparison[variant.arm === "A" ? "armALabel" : "armBLabel"]}</span></span>{winner === variant.arm && <span className={styles.winnerPill}>Performed better</span>}</header>
+        {variable === "COPY" ? <p className={styles.armVariable}>“{variant.copy}”</p> : <p className={`${styles.armVariable} ${styles.armPrice}`}>{money(variant.priceMinor)} <span>price</span></p>}
+        <div className={styles.armOutcome}><strong>{variable === "COPY" ? percentage(value.primaryRate) : money(value.primaryRate)}</strong><span>{variable === "COPY" ? "purchase rate" : "settled revenue per recipient"}</span></div>
         <dl><div><dt>Bought</dt><dd>{value.settledPurchases} of {value.assignedRecipients}</dd></div><div><dt>Settled revenue</dt><dd>{money(value.settledRevenueMinor)}</dd></div><div><dt>Refunded or disputed</dt><dd>{value.reversedPurchases}</dd></div></dl>
       </article>;
     })}</div>
-    {result.warnings.map((warning) => <p className="section-note arm-warning" key={warning}>{warning}</p>)}
+    {result.warnings.map((warning) => <p className={`${styles.sectionNote} ${styles.armWarning}`} key={warning}>{warning}</p>)}
   </section>;
 }
 
@@ -144,10 +145,10 @@ function ExperimentRecord({ experiment, provenance, launch, result }: { experime
       { id: "window", at: launch.observationEndsAt, label: experiment.state === "CLOSED" ? "Observation window closed" : "Observation window ends", detail: null },
     ] : []),
   ].sort((a, b) => a.at.localeCompare(b.at));
-  return <details className="experiment-record"><summary><span>Experiment record</span><small>Timeline, data source and ID</small></summary>
-    <div className="experiment-record-body">
-      <ol className="timeline">{events.map((event) => <li key={event.id}><span className="timeline-dot" aria-hidden="true" /><div><strong>{event.label}</strong>{event.detail && <p>{event.detail}</p>}<time dateTime={event.at}>{formatHistoryDateTime(event.at)}</time></div></li>)}</ol>
-      <dl className="detail-facts"><div><dt>Data</dt><dd>{provenance}</dd></div><div><dt>ID</dt><dd><code>{experiment.id}</code></dd></div></dl>
+  return <details className={styles.experimentRecord}><summary><span>Experiment record</span><small>Timeline, data source and ID</small></summary>
+    <div className={styles.experimentRecordBody}>
+      <ol className={styles.timeline}>{events.map((event) => <li key={event.id}><span className={styles.timelineDot} aria-hidden="true" /><div><strong>{event.label}</strong>{event.detail && <p>{event.detail}</p>}<time dateTime={event.at}>{formatHistoryDateTime(event.at)}</time></div></li>)}</ol>
+      <dl className={styles.detailFacts}><div><dt>Data</dt><dd>{provenance}</dd></div><div><dt>ID</dt><dd><code>{experiment.id}</code></dd></div></dl>
     </div>
   </details>;
 }
@@ -170,16 +171,16 @@ function ExperimentDetail({ experiment, base, live, database, lifecycle }: { exp
     : experiment.state === "RUNNING" ? "This experiment is running, but no complete result snapshot is available yet." : "This experiment has no result evidence. Perform will not attach another experiment’s scenario.";
   return <>
     <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href={base}>Experiments</Link><span>/</span><span>{experiment.name}</span></nav>
-    <header className="detail-hero"><div><h1>{experiment.name}</h1><p className="detail-meta">{meta}</p><p className="lede">{experiment.hypothesis}</p></div><span className={`status-pill state-${experiment.state.toLowerCase()}`}>{stateLabel(experiment.state)}</span></header>
+    <header className="detail-hero"><div><h1>{experiment.name}</h1><p className={styles.detailMeta}>{meta}</p><p className="lede">{experiment.hypothesis}</p></div><span className={styles.statusPill} data-state={experiment.state.toLowerCase()}>{stateLabel(experiment.state)}</span></header>
     {database?.launch && lifecycle && <ExperimentLifecycle key={experiment.id} experiment={database} lifecycle={lifecycle} />}
     {database && !database.launch && experiment.state === "ALLOCATED" && lifecycle && <SavedExperimentActions key={experiment.id} experiment={database} lifecycle={lifecycle} base={base} />}
     {database && (experiment.state === "PROVISIONING" || experiment.state === "VERIFIED") && lifecycle && <InterruptedLaunchActions key={experiment.id} experiment={database} lifecycle={lifecycle} base={base} />}
-    {result ? <div className="detail-flow">
+    {result ? <div className={styles.detailFlow}>
       <ResultHeadline result={result} />
       <ArmCards result={result} />
       <UncertaintyChart result={result} />
       <AudienceEvidencePanel evidence={result.fixture.audienceEvidence ?? []} />
-    </div> : <div className="result-empty"><h2>{emptyTitle}</h2><p>{emptyBody}</p></div>}
+    </div> : <div className={styles.resultEmpty}><h2>{emptyTitle}</h2><p>{emptyBody}</p></div>}
     <ExperimentRecord experiment={experiment} provenance={provenance} launch={launch} result={result} />
   </>;
 }
@@ -203,15 +204,15 @@ function InterruptedLaunchActions({ experiment, lifecycle, base }: {
     else setProblem(outcome.reasons);
   };
   return <section className="detail-panel lifecycle-panel" aria-labelledby="interrupted-title">
-    <p className="eyebrow">Launch interrupted{seeded && <> · <span className="fixture-label">Seeded · zero Fanvue requests</span></>}</p>
+    <p className="eyebrow">Launch interrupted{seeded && <> · <span className={styles.fixtureLabel}>Seeded · zero Fanvue requests</span></>}</p>
     <h2 id="interrupted-title">This launch stopped before sending</h2>
-    <p className="lifecycle-note">Perform started setting up the two custom lists{experiment.launch ? `, for delivery at ${formatHistoryDateTime(experiment.launch.scheduledAt)},` : ""} but stopped before scheduling any message, so no fan received anything. A launch is tied to its delivery time, so this one cannot be resumed. Abandoning it deletes the lists it created{seeded ? "" : " in Fanvue"} and hides it from your list.</p>
-    <div className="lifecycle-actions">
+    <p className={styles.lifecycleNote}>Perform started setting up the two custom lists{experiment.launch ? `, for delivery at ${formatHistoryDateTime(experiment.launch.scheduledAt)},` : ""} but stopped before scheduling any message, so no fan received anything. A launch is tied to its delivery time, so this one cannot be resumed. Abandoning it deletes the lists it created{seeded ? "" : " in Fanvue"} and hides it from your list.</p>
+    <div className={styles.lifecycleActions}>
       {confirming
-        ? <><span className="lifecycle-confirm">Abandon this launch and delete its lists?</span><button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep it</button><button type="button" className="danger" disabled={busy} aria-busy={busy} onClick={abandon}>{busy ? "Abandoning…" : "Abandon"}</button></>
-        : <button type="button" className="danger" onClick={() => setConfirming(true)}>Abandon launch</button>}
+        ? <><span className={styles.lifecycleConfirm}>Abandon this launch and delete its lists?</span><button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep it</button><button type="button" className={styles.danger} disabled={busy} aria-busy={busy} onClick={abandon}>{busy ? "Abandoning…" : "Abandon"}</button></>
+        : <button type="button" className={styles.danger} onClick={() => setConfirming(true)}>Abandon launch</button>}
     </div>
-    {problem && <div className="lifecycle-outcome blocked" role="alert"><strong>Not abandoned</strong><ul>{problem.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>}
+    {problem && <div className={`${styles.lifecycleOutcome} ${styles.blocked}`} role="alert"><strong>Not abandoned</strong><ul>{problem.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>}
   </section>;
 }
 
@@ -232,15 +233,15 @@ function SavedExperimentActions({ experiment, lifecycle, base }: {
   };
   const resumeHref = `${base}/new?resume=${encodeURIComponent(experiment.id)}&workspace=${experiment.workspace}`;
   return <section className="detail-panel lifecycle-panel" aria-labelledby="saved-title">
-    <p className="eyebrow">Not launched{experiment.workspace === "demo" && <> · <span className="fixture-label">Seeded · zero Fanvue requests</span></>}</p>
+    <p className="eyebrow">Not launched{experiment.workspace === "demo" && <> · <span className={styles.fixtureLabel}>Seeded · zero Fanvue requests</span></>}</p>
     <h2 id="saved-title">Ready to launch</h2>
-    <p className="lifecycle-note">The audience is frozen and split into two arms, but nothing has been created or sent in Fanvue. Continue to choose a delivery time and schedule both arms, or discard it.</p>
-    <div className="lifecycle-actions">
+    <p className={styles.lifecycleNote}>The audience is frozen and split into two arms, but nothing has been created or sent in Fanvue. Continue to choose a delivery time and schedule both arms, or discard it.</p>
+    <div className={styles.lifecycleActions}>
       {confirming
-        ? <><span className="lifecycle-confirm">Discard this experiment? It will be hidden from your list.</span><button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep it</button><button type="button" className="danger" disabled={busy} aria-busy={busy} onClick={discard}>{busy ? "Discarding…" : "Discard"}</button></>
+        ? <><span className={styles.lifecycleConfirm}>Discard this experiment? It will be hidden from your list.</span><button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep it</button><button type="button" className={styles.danger} disabled={busy} aria-busy={busy} onClick={discard}>{busy ? "Discarding…" : "Discard"}</button></>
         : <><button type="button" className="secondary" onClick={() => setConfirming(true)}>Discard</button><Link className="primary button-link" href={resumeHref}>Continue to launch</Link></>}
     </div>
-    {problem && <div className="lifecycle-outcome blocked" role="alert"><strong>Not discarded</strong><ul>{problem.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>}
+    {problem && <div className={`${styles.lifecycleOutcome} ${styles.blocked}`} role="alert"><strong>Not discarded</strong><ul>{problem.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>}
   </section>;
 }
 
@@ -262,18 +263,18 @@ function ExperimentLifecycle({ experiment, lifecycle }: { experiment: DatabaseEx
   }
   if (experiment.state !== "RUNNING") return null;
   return <section id="lifecycle" className="detail-panel lifecycle-panel" aria-labelledby="lifecycle-title">
-    <p className="eyebrow">Lifecycle{seeded && <> · <span className="fixture-label">Seeded · zero Fanvue requests</span></>}</p>
+    <p className="eyebrow">Lifecycle{seeded && <> · <span className={styles.fixtureLabel}>Seeded · zero Fanvue requests</span></>}</p>
     <h2 id="lifecycle-title">Observation and close</h2>
-    <dl className="detail-facts"><div><dt>Observation ends</dt><dd>{formatHistoryDateTime(launch.observationEndsAt)}</dd></div><div><dt>Latest reconciliation</dt><dd>{reconciliation ? `${formatHistoryDateTime(reconciliation.capturedAt)} · ${reconciliation.isComplete ? "complete" : "incomplete"}` : "None yet"}</dd></div></dl>
-    {reconciliation && <p className="lifecycle-note">{reconciliation.note}</p>}
-    <p className="lifecycle-note">Closing needs the window to have ended and a clean reconciliation, including Fanvue’s per-message totals, that covers it. It then deletes both custom lists{seeded ? "" : " in Fanvue"} and freezes the metrics.</p>
-    <div className="lifecycle-actions">
+    <dl className={styles.detailFacts}><div><dt>Observation ends</dt><dd>{formatHistoryDateTime(launch.observationEndsAt)}</dd></div><div><dt>Latest reconciliation</dt><dd>{reconciliation ? `${formatHistoryDateTime(reconciliation.capturedAt)} · ${reconciliation.isComplete ? "complete" : "incomplete"}` : "None yet"}</dd></div></dl>
+    {reconciliation && <p className={styles.lifecycleNote}>{reconciliation.note}</p>}
+    <p className={styles.lifecycleNote}>Closing needs the window to have ended and a clean reconciliation, including Fanvue’s per-message totals, that covers it. It then deletes both custom lists{seeded ? "" : " in Fanvue"} and freezes the metrics.</p>
+    <div className={styles.lifecycleActions}>
       <button type="button" className="secondary" disabled={busy !== null} aria-busy={busy === "reconcile"} onClick={() => run("reconcile")}>{busy === "reconcile" ? "Reconciling…" : "Run reconciliation"}</button>
       <button type="button" className="primary" disabled={busy !== null} aria-busy={busy === "close"} onClick={() => run("close")}>{busy === "close" ? "Checking…" : "Close experiment"}</button>
     </div>
     {outcome && (outcome.ok
-      ? <p className="lifecycle-outcome" role="status">{outcome.message}</p>
-      : <div className="lifecycle-outcome blocked" role="alert"><strong>Not closed yet</strong><ul>{outcome.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>)}
+      ? <p className={styles.lifecycleOutcome} role="status">{outcome.message}</p>
+      : <div className={`${styles.lifecycleOutcome} ${styles.blocked}`} role="alert"><strong>Not closed yet</strong><ul>{outcome.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>)}
   </section>;
 }
 
@@ -308,9 +309,9 @@ export function ExperimentHistory({
     <div className={`workspace-shell ${selectedId ? "history-shell" : "setup-shell"}`}>
       {selectedId ? selected ? <>
         <ExperimentDetail experiment={selected} base={base} live={realById.has(selected.id)} database={dbById.get(selected.id)} lifecycle={lifecycle} />
-      </> : realLoading ? <section className="empty-state history-empty" role="status" aria-busy="true"><h1>Loading experiment…</h1></section> : <section className="empty-state history-empty"><p className="eyebrow">Not found</p><h1>That experiment is not in this workspace.</h1><p>Experiment detail fails closed when its creator or provenance-scoped record cannot be found.</p><Link className="primary button-link" href={base}>Return to experiments</Link></section> : <>
-        <header className="history-hero"><div><h1>Your experiments</h1><p className="lede">Create, resume and inspect named tests. Fixture records stay clearly labelled; REAL launches require every server-side gate and an exact confirmation.</p></div><div className="history-actions">{!preview && <div className="workspace-switch" role="group" aria-label="Data workspace"><button type="button" aria-pressed={view === "live"} className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button><button type="button" aria-pressed={view === "seeded"} className={view === "seeded" ? "active" : ""} onClick={() => setView("seeded")}>Demo</button></div>}<Link className="primary button-link" href={`${base}/new`}><Plus size={16} />Create A/B test</Link></div></header>
-        {listed.length === 0 ? <section className="empty-state history-empty"><h2>{view === "live" && !preview ? (realLoading ? "Loading your experiments…" : "No live experiments yet") : "No experiments yet"}</h2><p>{view === "live" && !preview ? "Experiments you launch from Perform appear here. Switch to Demo to see example results." : "Create your first named A/B test. It will appear here after it is saved."}</p></section> : <section className="history-table-wrap" aria-label="Experiment history"><table className="history-table"><thead><tr><th scope="col">Experiment</th><th scope="col">Status</th><th scope="col">Result</th><th scope="col">Updated</th></tr></thead><tbody>{listed.map((experiment) => { const launch = dbById.get(experiment.id)?.launch; return <tr key={experiment.id}><th scope="row"><Link href={`${base}/experiments/${encodeURIComponent(experiment.id)}`}>{experiment.name}</Link><span>{experiment.variable === "COPY" ? "Copy" : "Price"} test · {audienceLabel(experiment.sourceAudienceUuid)}{launch && <> · {launch.armCounts.A + launch.armCounts.B} recipients · {realById.has(experiment.id) ? "live" : "seeded"}</>}</span></th><td data-label="Status"><span className={`status-pill state-${experiment.state.toLowerCase()}`}>{stateLabel(experiment.state)}</span>{launch && <small>Ends <time dateTime={launch.observationEndsAt}>{formatHistoryDate(launch.observationEndsAt)}</time></small>}</td><td data-label="Result" className="history-result">{dbById.has(experiment.id) ? (experiment.state === "RUNNING" ? "Awaiting purchases" : experiment.state === "CLOSED" ? "Closed" : "No evidence yet") : resultSummaryLabel(experiment)}</td><td data-label="Updated"><time dateTime={experiment.updatedAt}>{formatHistoryDate(experiment.updatedAt)}</time></td></tr>; })}</tbody></table>{(preview || view === "seeded") && <p className="fixture-note"><span className="fixture-label">Seeded demo</span> Four fixtures cover ready, running and blocked outcomes. Newly saved preview tests appear here too.</p>}</section>}
+      </> : realLoading ? <section className={`empty-state ${styles.historyEmpty}`} role="status" aria-busy="true"><h1>Loading experiment…</h1></section> : <section className={`empty-state ${styles.historyEmpty}`}><p className="eyebrow">Not found</p><h1>That experiment is not in this workspace.</h1><p>Experiment detail fails closed when its creator or provenance-scoped record cannot be found.</p><Link className="primary button-link" href={base}>Return to experiments</Link></section> : <>
+        <header className={styles.historyHero}><div><h1>Your experiments</h1><p className="lede">Create, resume and inspect named tests. Fixture records stay clearly labelled; REAL launches require every server-side gate and an exact confirmation.</p></div><div className={styles.historyActions}>{!preview && <div className="workspace-switch" role="group" aria-label="Data workspace"><button type="button" aria-pressed={view === "live"} className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button><button type="button" aria-pressed={view === "seeded"} className={view === "seeded" ? "active" : ""} onClick={() => setView("seeded")}>Demo</button></div>}<Link className="primary button-link" href={`${base}/new`}><Plus size={16} />Create A/B test</Link></div></header>
+        {listed.length === 0 ? <section className={`empty-state ${styles.historyEmpty}`}><h2>{view === "live" && !preview ? (realLoading ? "Loading your experiments…" : "No live experiments yet") : "No experiments yet"}</h2><p>{view === "live" && !preview ? "Experiments you launch from Perform appear here. Switch to Demo to see example results." : "Create your first named A/B test. It will appear here after it is saved."}</p></section> : <section className={styles.historyTableWrap} aria-label="Experiment history"><table className={styles.historyTable}><thead><tr><th scope="col">Experiment</th><th scope="col">Status</th><th scope="col">Result</th><th scope="col">Updated</th></tr></thead><tbody>{listed.map((experiment) => { const launch = dbById.get(experiment.id)?.launch; return <tr key={experiment.id}><th scope="row"><Link href={`${base}/experiments/${encodeURIComponent(experiment.id)}`}>{experiment.name}</Link><span>{experiment.variable === "COPY" ? "Copy" : "Price"} test · {audienceLabel(experiment.sourceAudienceUuid)}{launch && <> · {launch.armCounts.A + launch.armCounts.B} recipients · {realById.has(experiment.id) ? "live" : "seeded"}</>}</span></th><td data-label="Status"><span className={styles.statusPill} data-state={experiment.state.toLowerCase()}>{stateLabel(experiment.state)}</span>{launch && <small>Ends <time dateTime={launch.observationEndsAt}>{formatHistoryDate(launch.observationEndsAt)}</time></small>}</td><td data-label="Result" className={styles.historyResult}>{dbById.has(experiment.id) ? (experiment.state === "RUNNING" ? "Awaiting purchases" : experiment.state === "CLOSED" ? "Closed" : "No evidence yet") : resultSummaryLabel(experiment)}</td><td data-label="Updated"><time dateTime={experiment.updatedAt}>{formatHistoryDate(experiment.updatedAt)}</time></td></tr>; })}</tbody></table>{(preview || view === "seeded") && <p className={styles.fixtureNote}><span className={styles.fixtureLabel}>Seeded demo</span> Four fixtures cover ready, running and blocked outcomes. Newly saved preview tests appear here too.</p>}</section>}
       </>}
     </div>
   </main>;

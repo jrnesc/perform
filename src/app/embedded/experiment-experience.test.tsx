@@ -6,6 +6,7 @@ import { analyseResult } from "../../results/analyse";
 import { DEMO_RESULT_FIXTURES } from "../../results/demo-results-v1";
 import { experimentResultDetail } from "../../results/experiment-results";
 import { ProgressStrip, ResultComparison, ScenarioHeading, StageIcon, initialResultId, isProgressCompact, resetResultsViewport, setupStages } from "./experiment-experience";
+import styles from "./experiment-experience.module.css";
 import { AudienceEvidencePanel, ExperimentHistory, previewHistoryStorageKey } from "./experiment-history";
 
 describe("Experiment dashboard", () => {
@@ -90,7 +91,7 @@ describe("Experiment setup progress", () => {
     Object.defineProperty(window, "scrollY", { configurable: true, value: 240 });
     fireEvent.scroll(window);
     await waitFor(() => expect(nav.getAttribute("data-compact")).toBe("true"));
-    expect(container.querySelectorAll(".stage-icon")).toHaveLength(5);
+    expect(container.querySelectorAll(`.${styles.stageIcon}`)).toHaveLength(5);
   });
 
   it("marks the newly current progress and title icons to animate on appearance", () => {
@@ -101,7 +102,7 @@ describe("Experiment setup progress", () => {
 
   it("keeps the progress strip still but loops continuous heading icons", () => {
     const { container } = render(<><ProgressStrip current={1} /><StageIcon stage="Asset" decorative continuous /></>);
-    expect(container.querySelectorAll(".stage-icon svg")).toHaveLength(6);
+    expect(container.querySelectorAll(`.${styles.stageIcon} svg`)).toHaveLength(6);
     expect(screen.getByLabelText("Asset, current").querySelector('[data-animate-on-appear="true"]')).not.toBeNull();
   });
 });
@@ -139,7 +140,8 @@ describe("Aggregate results comparison", () => {
     const { container } = render(<ResultComparison result={result} />);
     const chart = screen.getByRole("img", { name: /Primary outcome for Arm A and Arm B/ });
     expect(chart.getAttribute("aria-label")).toMatch(/Aggregate-only grouped bar chart/);
-    expect(container.querySelector(".comparison-chart title")).toBeNull();
+    expect(container.querySelector(`.${styles.comparisonChart}`)).not.toBeNull();
+    expect(container.querySelector(`.${styles.comparisonChart} title`)).toBeNull();
     expect(screen.getByText(/No temporal buckets exist/)).not.toBeNull();
     const revenue = screen.getByRole("radio", { name: "Settled revenue" });
     fireEvent.click(revenue);
