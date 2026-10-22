@@ -9,4 +9,7 @@ coverage
 cloudflare-env.d.ts
 *.tsbuildinfo
 .DS_Store
-/docs
+/docs/handoffs
+/docs/product
+/docs/design
+/docs/research
