@@ -63,6 +63,29 @@ describe("Experiment dashboard", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  it("renders live results for a launched REAL experiment, and the reason when they are unavailable", () => {
+    const experiment = { ...DEMO_EXPERIMENT_HISTORY[1], id: "real-1", dataProvenance: "REAL" as const, state: "RUNNING" as const };
+    const real = [{ ...experiment, launch: { scheduledAt: "2026-10-22T10:02:00Z", observationEndsAt: "2026-10-29T10:02:00Z", armCounts: { A: 1, B: 1 } }, reconciliation: null }];
+    const evidence = DEMO_RESULT_FIXTURES[0].audienceEvidence!.map((row) => ({ ...row, provenance: "REAL" as const }));
+    const breakdown = { provenance: "REAL" as const, attributionStrategy: "ASSIGNMENT_WINDOW" as const, evidence, assignmentWindowOnly: 0, unmatchedPlausible: 0, caveat: null };
+    const converted = (arm: "A" | "B") => evidence.filter((row) => row.arm === arm && row.converted).length;
+    const assigned = (arm: "A" | "B") => evidence.filter((row) => row.arm === arm).length;
+    render(<ExperimentHistory preview={false} selectedId="real-1" realExperiments={real} liveResults={{ status: "available", breakdown }} />);
+    expect(screen.getByRole("heading", { name: "Results so far" })).not.toBeNull();
+    expect(screen.queryByText("Awaiting purchases")).toBeNull();
+    expect(screen.getByText(`${converted("A")} of ${assigned("A")}`)).not.toBeNull();
+    expect(screen.getByText(`${converted("B")} of ${assigned("B")}`)).not.toBeNull();
+    expect(screen.getAllByText("Live Fanvue evidence").length).toBeGreaterThan(0);
+    cleanup();
+    render(<ExperimentHistory preview={false} selectedId="real-1" realExperiments={[{ ...real[0], state: "CLOSED" }]} liveResults={{ status: "available", breakdown }} />);
+    expect(screen.getByRole("heading", { name: "Final result" })).not.toBeNull();
+    expect(screen.getByText("Live · frozen at close")).not.toBeNull();
+    cleanup();
+    render(<ExperimentHistory preview={false} selectedId="real-1" realExperiments={real} liveResults={{ status: "unavailable", message: "Live results could not be read right now." }} />);
+    expect(screen.getByRole("heading", { name: "Awaiting purchases" })).not.toBeNull();
+    expect(screen.getByText("Live results could not be read right now.")).not.toBeNull();
+  });
+
   it("fails closed when result evidence names a different experiment", () => {
     const experiment = DEMO_EXPERIMENT_HISTORY[0];
     const result = analyseResult(DEMO_RESULT_FIXTURES[0]);

@@ -17,6 +17,7 @@ import {
 import type { AnalysedResult, AudienceMemberEvidence } from "../../results/contracts";
 import { DEMO_RESULT_FIXTURES } from "../../results/demo-results-v1";
 import { experimentResultDetail, experimentResultSummary } from "../../results/experiment-results";
+import type { LiveAudienceBreakdown } from "../../results/live-audience-evidence";
 import { ResultHeadline, UncertaintyChart } from "./experiment-experience";
 import styles from "./experiment-history.module.css";
 
@@ -27,6 +28,12 @@ export type RealExperiment = ExperimentRecord & {
 };
 
 type DatabaseExperiment = RealExperiment & { workspace: "real" | "demo" };
+
+/** The REAL Results read for one experiment: its per-member evidence, or why it is not available. */
+export type LiveResults =
+  | { status: "loading" }
+  | { status: "available"; breakdown: LiveAudienceBreakdown }
+  | { status: "unavailable"; message: string };
 
 export type LifecycleOutcome = { ok: true; message: string } | { ok: false; reasons: readonly string[] };
 export type LifecycleAction = (action: "reconcile" | "close" | "discard" | "abandon", experiment: DatabaseExperiment) => Promise<LifecycleOutcome>;
@@ -135,6 +142,37 @@ function ArmCards({ result }: { result: AnalysedResult }) {
   </section>;
 }
 
+/**
+ * Live results for a REAL experiment: per-arm totals counted from the same per-member evidence the
+ * cohort panel uses. No significance claim is made here; the seeded analysis model is fixture-only.
+ */
+function LiveResultsSection({ breakdown, closed }: { breakdown: LiveAudienceBreakdown; closed: boolean }) {
+  const arms = (["A", "B"] as const).map((arm) => {
+    const rows = breakdown.evidence.filter((row) => row.arm === arm);
+    return {
+      arm,
+      assigned: rows.length,
+      converted: rows.filter((row) => row.converted).length,
+      settledRevenueMinor: rows.reduce((sum, row) => sum + row.settledRevenueMinor, 0),
+      reversed: rows.filter((row) => row.fullyRefunded || row.disputed).length,
+    };
+  });
+  const purchases = arms.reduce((sum, arm) => sum + arm.converted, 0);
+  return <div className={styles.detailFlow}>
+    <section className="detail-section" aria-labelledby="live-results-title">
+      <div className={styles.sectionHeading}><h2 id="live-results-title" className="section-title">{closed ? "Final result" : "Results so far"}</h2><span className={styles.provenanceLive}>{closed ? "Live · frozen at close" : "Live Fanvue evidence"}</span></div>
+      <p className={styles.sectionNote}>{purchases === 0 ? "No attributed purchases yet. Counts update as payment webhooks and reconciliations arrive." : "Counts of fans who bought after assignment, by the arm they were assigned to. Small live samples are descriptive, not a winner."}</p>
+      <div className={styles.armCards}>{arms.map((value) => <article key={value.arm} className={styles.armCard}>
+        <header><span className={styles.armName}><i className={value.arm === "A" ? styles.armA : styles.armB} aria-hidden="true" />Arm {value.arm}</span></header>
+        <div className={styles.armOutcome}><strong>{value.assigned ? percentage(value.converted / value.assigned) : "—"}</strong><span>purchase rate</span></div>
+        <dl><div><dt>Bought</dt><dd>{value.converted} of {value.assigned}</dd></div><div><dt>Settled revenue</dt><dd>{money(value.settledRevenueMinor)}</dd></div><div><dt>Refunded or disputed</dt><dd>{value.reversed}</dd></div></dl>
+      </article>)}</div>
+      {breakdown.unmatchedPlausible > 0 && <p className={`${styles.sectionNote} ${styles.armWarning}`}>{breakdown.unmatchedPlausible} plausible {breakdown.unmatchedPlausible === 1 ? "payment was" : "payments were"} not counted because no message ID matched.</p>}
+    </section>
+    <AudienceEvidencePanel evidence={breakdown.evidence} caveat={breakdown.caveat} />
+  </div>;
+}
+
 /** Audit detail a creator rarely needs: one chronological timeline, then where the data came from and the stable ID. */
 function ExperimentRecord({ experiment, provenance, launch, result }: { experiment: ExperimentRecord; provenance: string; launch: RealExperiment["launch"]; result: AnalysedResult | null }) {
   const events = [
@@ -154,7 +192,7 @@ function ExperimentRecord({ experiment, provenance, launch, result }: { experime
 }
 
 /** Experiment detail, read top to bottom: the verdict, what was tested, how sure, who converted, then the record. */
-function ExperimentDetail({ experiment, base, live, database, lifecycle }: { experiment: ExperimentRecord; base: string; live: boolean; database?: DatabaseExperiment; lifecycle?: LifecycleAction }) {
+function ExperimentDetail({ experiment, base, live, database, lifecycle, liveResults }: { experiment: ExperimentRecord; base: string; live: boolean; database?: DatabaseExperiment; lifecycle?: LifecycleAction; liveResults?: LiveResults }) {
   const launch = database?.launch ?? null;
   const result = database ? null : experimentResultDetail(experiment, linkedResult(experiment)).result;
   const provenance = live ? "Live Fanvue data" : database ? "Seeded database · fixture gateway, no Fanvue requests" : "Seeded demo fixture · no live data";
@@ -180,7 +218,9 @@ function ExperimentDetail({ experiment, base, live, database, lifecycle }: { exp
       <ArmCards result={result} />
       <UncertaintyChart result={result} />
       <AudienceEvidencePanel evidence={result.fixture.audienceEvidence ?? []} />
-    </div> : <div className={styles.resultEmpty}><h2>{emptyTitle}</h2><p>{emptyBody}</p></div>}
+    </div> : live && launch && liveResults?.status === "available" ? <LiveResultsSection breakdown={liveResults.breakdown} closed={experiment.state === "CLOSED"} />
+      : live && launch && liveResults?.status === "loading" ? <div className={styles.resultEmpty} role="status" aria-busy="true"><h2>Loading live results…</h2></div>
+      : <div className={styles.resultEmpty}><h2>{emptyTitle}</h2><p>{emptyBody}</p>{live && launch && liveResults?.status === "unavailable" && <p className={styles.resultWarning}>{liveResults.message}</p>}</div>}
     <ExperimentRecord experiment={experiment} provenance={provenance} launch={launch} result={result} />
   </>;
 }
@@ -279,12 +319,14 @@ function ExperimentLifecycle({ experiment, lifecycle }: { experiment: DatabaseEx
 }
 
 export function ExperimentHistory({
-  preview, selectedId, realExperiments = [], seededExperiments = [], realLoading = false, lifecycle,
+  preview, selectedId, realExperiments = [], seededExperiments = [], realLoading = false, lifecycle, liveResults,
 }: {
   preview: boolean; selectedId?: string; realExperiments?: readonly RealExperiment[];
   /** Seeded experiments saved in the demo database; they launch and close through the fixture gateway. */
   seededExperiments?: readonly RealExperiment[];
   realLoading?: boolean; lifecycle?: LifecycleAction;
+  /** The REAL Results read for the selected experiment, when it is a launched live one. */
+  liveResults?: LiveResults;
 }) {
   const base = preview ? "/preview" : "/embedded";
   const [saved, setSaved] = useState<ExperimentRecord[]>([]);
@@ -308,7 +350,7 @@ export function ExperimentHistory({
     <header className="masthead"><Link className="brand-lockup history-brand" href={base}><span className="brand-mark" aria-hidden="true"><Drama size={19} /></span><div><strong>Perform</strong><span>Offer experiments</span></div></Link><span className="connection"><i />{preview ? "Fixture preview" : "Creator workspace"}</span></header>
     <div className={`workspace-shell ${selectedId ? "history-shell" : "setup-shell"}`}>
       {selectedId ? selected ? <>
-        <ExperimentDetail experiment={selected} base={base} live={realById.has(selected.id)} database={dbById.get(selected.id)} lifecycle={lifecycle} />
+        <ExperimentDetail experiment={selected} base={base} live={realById.has(selected.id)} database={dbById.get(selected.id)} lifecycle={lifecycle} liveResults={liveResults} />
       </> : realLoading ? <section className={`empty-state ${styles.historyEmpty}`} role="status" aria-busy="true"><h1>Loading experiment…</h1></section> : <section className={`empty-state ${styles.historyEmpty}`}><p className="eyebrow">Not found</p><h1>That experiment is not in this workspace.</h1><p>Experiment detail fails closed when its creator or provenance-scoped record cannot be found.</p><Link className="primary button-link" href={base}>Return to experiments</Link></section> : <>
         <header className={styles.historyHero}><div><h1>Your experiments</h1><p className="lede">Create, resume and inspect named tests. Fixture records stay clearly labelled; REAL launches require every server-side gate and an exact confirmation.</p></div><div className={styles.historyActions}>{!preview && <div className="workspace-switch" role="group" aria-label="Data workspace"><button type="button" aria-pressed={view === "live"} className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button><button type="button" aria-pressed={view === "seeded"} className={view === "seeded" ? "active" : ""} onClick={() => setView("seeded")}>Demo</button></div>}<Link className="primary button-link" href={`${base}/new`}><Plus size={16} />Create A/B test</Link></div></header>
         {listed.length === 0 ? <section className={`empty-state ${styles.historyEmpty}`}><h2>{view === "live" && !preview ? (realLoading ? "Loading your experiments…" : "No live experiments yet") : "No experiments yet"}</h2><p>{view === "live" && !preview ? "Experiments you launch from Perform appear here. Switch to Demo to see example results." : "Create your first named A/B test. It will appear here after it is saved."}</p></section> : <section className={styles.historyTableWrap} aria-label="Experiment history"><table className={styles.historyTable}><thead><tr><th scope="col">Experiment</th><th scope="col">Status</th><th scope="col">Result</th><th scope="col">Updated</th></tr></thead><tbody>{listed.map((experiment) => { const launch = dbById.get(experiment.id)?.launch; return <tr key={experiment.id}><th scope="row"><Link href={`${base}/experiments/${encodeURIComponent(experiment.id)}`}>{experiment.name}</Link><span>{experiment.variable === "COPY" ? "Copy" : "Price"} test · {audienceLabel(experiment.sourceAudienceUuid)}{launch && <> · {launch.armCounts.A + launch.armCounts.B} recipients · {realById.has(experiment.id) ? "live" : "seeded"}</>}</span></th><td data-label="Status"><span className={styles.statusPill} data-state={experiment.state.toLowerCase()}>{stateLabel(experiment.state)}</span>{launch && <small>Ends <time dateTime={launch.observationEndsAt}>{formatHistoryDate(launch.observationEndsAt)}</time></small>}</td><td data-label="Result" className={styles.historyResult}>{dbById.has(experiment.id) ? (experiment.state === "RUNNING" ? "Awaiting purchases" : experiment.state === "CLOSED" ? "Closed" : "No evidence yet") : resultSummaryLabel(experiment)}</td><td data-label="Updated"><time dateTime={experiment.updatedAt}>{formatHistoryDate(experiment.updatedAt)}</time></td></tr>; })}</tbody></table>{(preview || view === "seeded") && <p className={styles.fixtureNote}><span className={styles.fixtureLabel}>Seeded demo</span> Four fixtures cover ready, running and blocked outcomes. Newly saved preview tests appear here too.</p>}</section>}
@@ -345,6 +387,27 @@ function RealHistory({ selectedId }: { selectedId?: string }) {
       .finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [status, authFetch, revision]);
+  const selectedLive = real.find((item) => item.id === selectedId && item.launch);
+  const [liveResults, setLiveResults] = useState<{ id: string; value: LiveResults } | null>(null);
+  useEffect(() => {
+    if (status !== "authenticated" || !selectedLive) return;
+    let cancelled = false;
+    const id = selectedLive.id;
+    authFetch(`/api/experiments/results/live?experimentId=${encodeURIComponent(id)}`)
+      .then(async (response): Promise<LiveResults> => {
+        const body = await response.json().catch(() => ({})) as { breakdown?: LiveAudienceBreakdown; error?: { code?: string } };
+        if (response.ok && body.breakdown) return { status: "available", breakdown: body.breakdown };
+        return { status: "unavailable", message: body.error?.code === "capability_not_active"
+          ? "Live results need every read capability verified and active for this creator."
+          : "Live results could not be read right now." };
+      })
+      .catch((): LiveResults => ({ status: "unavailable", message: "Perform could not be reached for live results." }))
+      .then((value) => { if (!cancelled) setLiveResults({ id, value }); });
+    return () => { cancelled = true; };
+  }, [status, authFetch, selectedLive, revision]);
+  const currentLiveResults: LiveResults | undefined = selectedLive
+    ? liveResults?.id === selectedLive.id ? liveResults.value : { status: "loading" }
+    : undefined;
   const lifecycle: LifecycleAction = async (action, experiment) => {
     try {
       const response = await authFetch(`/api/experiments/${action}`, {
@@ -364,7 +427,7 @@ function RealHistory({ selectedId }: { selectedId?: string }) {
       return { ok: false, reasons: ["Perform could not be reached. Try again."] };
     }
   };
-  return <ExperimentHistory preview={false} selectedId={selectedId} realExperiments={real} seededExperiments={seeded} lifecycle={lifecycle} realLoading={!(loaded || status === "idle" || status === "error")} />;
+  return <ExperimentHistory preview={false} selectedId={selectedId} realExperiments={real} seededExperiments={seeded} lifecycle={lifecycle} liveResults={currentLiveResults} realLoading={!(loaded || status === "idle" || status === "error")} />;
 }
 
 /** Experiments home and detail inside Fanvue: exchanges the launcher token, then lists the creator's real experiments. */
