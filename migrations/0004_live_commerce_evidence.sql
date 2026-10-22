@@ -1,5 +1,6 @@
--- Live commerce evidence (ADRs 0011, 0013, 0015): verified webhook events, dead letters and
--- append-only earnings reconciliation. Nothing here makes a capability live.
+-- One commerce evidence path for seeded and live results (ADRs 0011, 0013, 0015, 0017):
+-- verified webhook events, deterministic seeded fixtures, dead letters and append-only
+-- reconciliation. Database separation plus experiments.data_provenance keeps sources isolated.
 PRAGMA foreign_keys = ON;
 
 -- Verified, creator-scoped commerce events attributed to an experiment (ADR 0015).
@@ -7,7 +8,7 @@ PRAGMA foreign_keys = ON;
 -- A payment counts toward arm totals unless it is MESSAGE_UUID_MATCH with message_matched = 0,
 -- which records a plausible purchase that the message-UUID rule could not place.
 CREATE TABLE commerce_events (
-  source TEXT NOT NULL CHECK (source = 'FANVUE_WEBHOOK'),
+  source TEXT NOT NULL CHECK (source IN ('FANVUE_WEBHOOK', 'SEEDED_FIXTURE')),
   event_id TEXT NOT NULL,
   creator_uuid TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('PAYMENT', 'REVERSAL')),
@@ -118,3 +119,66 @@ BEFORE UPDATE ON reconciliation_snapshots
 BEGIN
   SELECT RAISE(ABORT, 'reconciliation_snapshots are append-only');
 END;
+
+-- Phase X evidence and explicit owner decisions. The application exposes read ports only; these
+-- rows are inserted out of band by the owner after a real-account verification.
+CREATE TABLE capability_verifications (
+  id TEXT PRIMARY KEY,
+  creator_uuid TEXT NOT NULL,
+  capability TEXT NOT NULL CHECK (capability IN (
+    'audience_discovery', 'subscriber_state', 'purchase_enrichment', 'commerce_webhook',
+    'earnings_reconciliation', 'mass_message_totals', 'send'
+  )),
+  outcome TEXT NOT NULL CHECK (outcome IN ('PASS', 'FAIL')),
+  contract_reference TEXT NOT NULL CHECK (length(trim(contract_reference)) > 0),
+  evidence_note TEXT NOT NULL CHECK (length(trim(evidence_note)) > 0),
+  recorded_at TEXT NOT NULL,
+  UNIQUE (id, creator_uuid, capability)
+) STRICT;
+
+CREATE INDEX capability_verifications_creator_capability
+  ON capability_verifications (creator_uuid, capability, recorded_at DESC, id DESC);
+
+CREATE TRIGGER capability_verifications_no_update BEFORE UPDATE ON capability_verifications
+BEGIN SELECT RAISE(ABORT, 'capability_verifications are append-only'); END;
+CREATE TRIGGER capability_verifications_no_delete BEFORE DELETE ON capability_verifications
+BEGIN SELECT RAISE(ABORT, 'capability_verifications are append-only'); END;
+
+CREATE TABLE capability_activations (
+  id TEXT PRIMARY KEY,
+  creator_uuid TEXT NOT NULL,
+  capability TEXT NOT NULL CHECK (capability IN (
+    'audience_discovery', 'subscriber_state', 'purchase_enrichment', 'commerce_webhook',
+    'earnings_reconciliation', 'mass_message_totals', 'send'
+  )),
+  action TEXT NOT NULL CHECK (action IN ('ACTIVATE', 'DEACTIVATE')),
+  verification_id TEXT NOT NULL,
+  decision_note TEXT NOT NULL CHECK (length(trim(decision_note)) > 0),
+  recorded_at TEXT NOT NULL,
+  FOREIGN KEY (verification_id, creator_uuid, capability)
+    REFERENCES capability_verifications(id, creator_uuid, capability)
+) STRICT;
+
+CREATE INDEX capability_activations_creator_capability
+  ON capability_activations (creator_uuid, capability, recorded_at DESC, id DESC);
+
+CREATE TRIGGER capability_activations_no_update BEFORE UPDATE ON capability_activations
+BEGIN SELECT RAISE(ABORT, 'capability_activations are append-only'); END;
+CREATE TRIGGER capability_activations_no_delete BEFORE DELETE ON capability_activations
+BEGIN SELECT RAISE(ABORT, 'capability_activations are append-only'); END;
+
+-- First real purchase after launch records whether Fanvue's payment message UUID is the
+-- mass-message UUID returned at schedule time. The first observation is immutable.
+CREATE TABLE attribution_proofs (
+  experiment_id TEXT PRIMARY KEY REFERENCES experiments(id) ON DELETE CASCADE,
+  creator_uuid TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK (outcome IN ('MATCH', 'NO_MATCH')),
+  payment_message_uuid TEXT NOT NULL,
+  confirmed_message_uuid TEXT NOT NULL,
+  observed_at TEXT NOT NULL
+) STRICT;
+
+CREATE TRIGGER attribution_proofs_no_update BEFORE UPDATE ON attribution_proofs
+BEGIN SELECT RAISE(ABORT, 'attribution_proofs are append-only'); END;
+CREATE TRIGGER attribution_proofs_no_delete BEFORE DELETE ON attribution_proofs
+BEGIN SELECT RAISE(ABORT, 'attribution_proofs are append-only'); END;

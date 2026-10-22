@@ -43,9 +43,9 @@ export type GuardedCaptureResult =
 export async function runGuardedLiveAudienceCapture(input: {
   session: VerifiedCreatorSession | null;
   env: CapabilityEnvironment;
-  /** From recorded Phase X results; nothing records them yet. */
+  /** From append-only Phase X results written out of band by the owner. */
   verified: readonly LiveCapabilityId[];
-  /** From an explicit owner activation; nothing records it yet. */
+  /** From append-only owner activation decisions written out of band. */
   activated: readonly LiveCapabilityId[];
   experimentId: string;
   source: AudienceSource;

@@ -76,53 +76,16 @@ export interface SendOutcome {
   occurredAt: string;
   externalMessageUuid?: string;
   errorCode?: string;
+  scheduledAt?: string;
+  recipientCount?: number;
 }
 
-export interface PurchaseEvent {
-  source: string;
-  eventId: string;
-  eventType: string;
-  payloadHash: string;
-  experimentId: string;
-  arm: Arm;
-  purchaserUuid: string;
-  externalMessageUuid: string;
-  grossMinor: number;
-  netMinor?: number;
-  currency: string;
-  occurredAt: string;
-  receivedAt: string;
-}
-
-export interface MetricSnapshot {
-  id: string;
-  experimentId: string;
-  arm: Arm;
-  source: MetricSource;
-  assignedRecipientCount: number;
-  deliveredCount?: number;
-  viewCount?: number;
-  purchaseCount: number;
-  grossMinor: number;
-  netMinor?: number;
-  currency: string;
-  isComplete: boolean;
-  sourceObservedAt: string;
-  capturedAt: string;
-  provenanceNote?: string;
-}
-
-export interface PurchaseReversalEvent {
-  source: string;
-  eventId: string;
-  eventType: string;
-  payloadHash: string;
-  purchaseSource: string;
-  purchaseEventId: string;
-  kind: "REFUND" | "DISPUTE";
-  amountMinor: number;
-  occurredAt: string;
-  receivedAt: string;
+export interface StoredSendIntent extends NewSendIntent {
+  status: SendStatus;
+  externalMessageUuid?: string;
+  scheduledAt?: string;
+  recipientCount?: number;
+  cancelledAt?: string;
 }
 
 export interface TransitionCommand {
@@ -146,6 +109,9 @@ export interface PerformRepository {
   getExperimentResult(experimentId: string): Promise<AnalysedResult | null>;
   listExperiments(): Promise<readonly ExperimentRecord[]>;
   listExperimentSummaries(): Promise<readonly ExperimentHistoryItem[]>;
+  listAssignments(experimentId: string): Promise<readonly Assignment[]>;
+  listVariants(experimentId: string): Promise<readonly VariantDefinition[]>;
+  listSendIntents(experimentId: string): Promise<readonly StoredSendIntent[]>;
   saveAssignmentChunk(
     experimentId: string,
     assignments: readonly Assignment[],
@@ -154,9 +120,6 @@ export interface PerformRepository {
   finalizeAllocation(input: AllocationCommit): Promise<void>;
   createSendIntents(intents: readonly NewSendIntent[]): Promise<void>;
   recordSendOutcome(outcome: SendOutcome): Promise<void>;
-  recordPurchaseEvent(event: PurchaseEvent): Promise<"RECORDED" | "DUPLICATE">;
-  appendMetricSnapshot(snapshot: MetricSnapshot): Promise<void>;
-  recordPurchaseReversal(event: PurchaseReversalEvent): Promise<"RECORDED" | "DUPLICATE">;
   saveAnalysisResult(result: AnalysedResult): Promise<void>;
   saveAudienceLearning(learning: AudienceLearning): Promise<void>;
   listAudienceLearnings(): Promise<readonly AudienceLearning[]>;

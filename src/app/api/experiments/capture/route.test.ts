@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const getSession = vi.fn();
-const getCloudflareContext = vi.fn(() => { throw new Error("database must not be opened"); });
+const fakeDatabase = {
+  prepare: () => ({
+    bind() { return this; },
+    async all() { return { success: true, results: [] }; },
+  }),
+};
+const getCloudflareContext = vi.fn(async () => ({ env: { PERFORM_REAL_DB: fakeDatabase } }));
 vi.mock("@fanvue/builder-sdk/nextjs/embedded-app", () => ({ getSession }));
 vi.mock("@opennextjs/cloudflare", () => ({ getCloudflareContext }));
 
@@ -30,6 +36,6 @@ describe("live audience capture route", () => {
       error: { code: "capability_not_active" },
       capabilities: { audience_discovery: "connected", subscriber_state: "connected", purchase_enrichment: "connected" },
     });
-    expect(getCloudflareContext).not.toHaveBeenCalled();
+    expect(getCloudflareContext).toHaveBeenCalledOnce();
   });
 });

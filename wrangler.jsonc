@@ -13,16 +13,23 @@
     {
       "binding": "PERFORM_REAL_DB",
       "database_name": "perform-real",
-      "database_id": "101d8691-9b7b-4f7f-8b15-f7b671ca74f3",
+      "database_id": "0c220e9e-061f-4ecd-a5e2-051c5bd88071",
       "migrations_dir": "migrations"
     },
     {
       "binding": "PERFORM_DEMO_DB",
       "database_name": "perform-demo",
-      "database_id": "195d363e-32f9-4ce7-8b42-a8ae32725069",
+      "database_id": "1e4c519b-5dea-4426-b3eb-7a2c7e68bfec",
       "migrations_dir": "migrations"
     }
   ],
+  "vars": {
+    "OAUTH_SCOPES": "read:self read:media read:chat read:fan read:insights read:creator write:chat",
+    "PERFORM_LIVE_CREATOR_UUID": "37cf7958-9d75-4330-a09d-3ecae7f179c3",
+    "PERFORM_LIVE_COMMERCE_WEBHOOK_ENABLED": "true",
+    "PERFORM_LIVE_CAPABILITIES": "subscriber_state,purchase_enrichment,audience_discovery",
+    "PERFORM_LIVE_COMMERCE_WEBHOOK_ENABLED": "true"
+  },
   "observability": {
     "enabled": true
   }

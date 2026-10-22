@@ -9,12 +9,12 @@ describe("operator evidence view", () => {
     await ctx.store.recordDeadLetter({ id: "dead-1", reason: "WRONG_CREATOR", eventId: "event-x", payloadHash: "secret-hash", receivedAt: "2026-10-21T11:00:00.000Z" });
     await ctx.store.recordDeadLetter({ id: "dead-2", reason: "ATTRIBUTION_AMBIGUOUS", eventId: "event-y", payloadHash: "secret-hash", receivedAt: "2026-10-21T12:00:00.000Z" });
     await ctx.store.recordCommerceEvent({
-      kind: "REVERSAL", eventId: "event-r", creatorUuid, paymentId: "payment-unknown", reversalId: "refund-1",
+      source: "FANVUE_WEBHOOK", kind: "REVERSAL", eventId: "event-r", creatorUuid, paymentId: "payment-unknown", reversalId: "refund-1",
       reversalType: "REFUND", amountMinor: 1200, currency: "USD", occurredAt: "2026-10-21T12:00:00.000Z",
       payloadHash: "h", receivedAt: "2026-10-21T12:00:01.000Z",
     });
     await ctx.store.recordCommerceEvent({
-      kind: "PAYMENT", eventId: "event-p", creatorUuid, paymentId: "payment-1", purchaserUuid: "fan-1",
+      source: "FANVUE_WEBHOOK", kind: "PAYMENT", eventId: "event-p", creatorUuid, paymentId: "payment-1", purchaserUuid: "fan-1",
       messageUuid: "message-a", messageType: "BROADCAST", attributionStrategy: "ASSIGNMENT_WINDOW", messageMatched: true,
       experimentId: ctx.experimentId, arm: ctx.armOf("fan-1"), grossMinor: 4321, netMinor: 3000, currency: "USD",
       occurredAt: "2026-10-21T11:00:00.000Z", payloadHash: "h2", receivedAt: "2026-10-21T11:00:01.000Z",

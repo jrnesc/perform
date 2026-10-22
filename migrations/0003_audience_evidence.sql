@@ -1,7 +1,7 @@
 -- Immutable pre-assignment audience evidence for seeded and live experiments alike (ADRs 0010,
 -- 0014, 0016): provenance is the database and experiments.data_provenance. Facts come from
 -- subscription history, Fan Insights status and reversal-adjusted purchase totals. No handles,
--- display names or avatars. Also normalized purchase reversals.
+-- display names or avatars. Commerce outcomes live in migration 0004 for both provenances.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE audience_member_evidence (
@@ -36,20 +36,3 @@ BEFORE UPDATE ON audience_member_evidence
 BEGIN
   SELECT RAISE(ABORT, 'audience_member_evidence is immutable');
 END;
-
-CREATE TABLE purchase_reversals (
-  source TEXT NOT NULL,
-  event_id TEXT NOT NULL,
-  purchase_source TEXT NOT NULL,
-  purchase_event_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('REFUND', 'DISPUTE')),
-  amount_minor INTEGER NOT NULL CHECK (amount_minor > 0),
-  occurred_at TEXT NOT NULL,
-  recorded_at TEXT NOT NULL,
-  PRIMARY KEY (source, event_id),
-  FOREIGN KEY (source, event_id) REFERENCES webhook_events(source, event_id) ON DELETE CASCADE,
-  FOREIGN KEY (purchase_source, purchase_event_id) REFERENCES purchases(source, event_id) ON DELETE CASCADE
-) STRICT;
-
-CREATE INDEX purchase_reversals_purchase
-  ON purchase_reversals (purchase_source, purchase_event_id, occurred_at);

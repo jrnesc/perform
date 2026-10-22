@@ -68,12 +68,12 @@ export async function receiveCreatorCommerceWebhook(input: {
 }): Promise<WebhookResult> {
   const { config, repository } = input;
   if (!config.enabled) return result(404, "DISABLED");
+  // The verification probe is the only unsigned request Fanvue sends. It carries no data, so
+  // acknowledging it stores nothing, and it must be answered before the secret exists: Fanvue
+  // only reveals the signing secret once the destination has been created and probed.
+  if (!input.signature && isVerificationProbe(input.rawBody)) return result(200, "VERIFICATION");
   if (!config.signingSecret || !config.creatorUuid) return result(503, "NOT_CONFIGURED");
-  if (!input.signature) {
-    // The verification probe is the only unsigned request Fanvue sends. It carries no data, so
-    // acknowledging it stores nothing; any other unsigned request is rejected.
-    return isVerificationProbe(input.rawBody) ? result(200, "VERIFICATION") : result(401, "INVALID_SIGNATURE");
-  }
+  if (!input.signature) return result(401, "INVALID_SIGNATURE");
 
   const receivedAt = new Date(input.nowMs).toISOString();
   const parsed = await verifyAndParseCreatorEvidence({
@@ -110,7 +110,20 @@ export async function receiveCreatorCommerceWebhook(input: {
       if (decision.kind === "UNRELATED") return result(200, "UNRELATED");
       // Never guess between overlapping experiments; keep a hash-only record for the operator.
       if (decision.kind === "AMBIGUOUS") return deadLetter("ATTRIBUTION_AMBIGUOUS", event.eventId, payloadHash, 200);
+      const context = await repository.getAttributionContext(decision.experimentId);
+      const confirmedMessageUuid = Object.entries(context.messages)
+        .find(([, arm]) => arm === decision.arm)?.[0];
+      if (confirmedMessageUuid) {
+        await repository.recordAttributionProof({
+          experimentId: decision.experimentId,
+          outcome: event.messageUuid === confirmedMessageUuid ? "MATCH" : "NO_MATCH",
+          paymentMessageUuid: event.messageUuid,
+          confirmedMessageUuid,
+          observedAt: receivedAt,
+        });
+      }
       const outcome = await repository.recordCommerceEvent({
+        source: "FANVUE_WEBHOOK",
         kind: "PAYMENT",
         eventId: event.eventId, creatorUuid: event.creatorUuid, paymentId: event.paymentId,
         purchaserUuid: event.purchaserUuid, messageUuid: event.messageUuid, messageType: event.messageType,
@@ -125,6 +138,7 @@ export async function receiveCreatorCommerceWebhook(input: {
     }
 
     const outcome = await repository.recordCommerceEvent({
+      source: "FANVUE_WEBHOOK",
       kind: "REVERSAL",
       eventId: event.eventId, creatorUuid: event.creatorUuid, paymentId: event.paymentId,
       reversalId: event.reversalId, reversalType: event.reversalType,

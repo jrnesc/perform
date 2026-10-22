@@ -27,6 +27,7 @@ export type AudienceEvidenceRow = {
 
 export type CommerceEventRecord =
   | {
+      source: "FANVUE_WEBHOOK" | "SEEDED_FIXTURE";
       kind: "PAYMENT";
       eventId: string;
       creatorUuid: string;
@@ -47,6 +48,7 @@ export type CommerceEventRecord =
       receivedAt: string;
     }
   | {
+      source: "FANVUE_WEBHOOK" | "SEEDED_FIXTURE";
       kind: "REVERSAL";
       eventId: string;
       creatorUuid: string;
@@ -141,6 +143,14 @@ export interface LiveEvidenceRepository {
   listAudienceEvidence(experimentId: string): Promise<readonly AudienceEvidenceRow[]>;
   listAttributionCandidates(purchaserUuid: string, messageUuid: string): Promise<readonly AttributionCandidate[]>;
   getAttributionContext(experimentId: string): Promise<AttributionContext>;
+  recordAttributionProof(input: {
+    experimentId: string;
+    outcome: "MATCH" | "NO_MATCH";
+    paymentMessageUuid: string;
+    confirmedMessageUuid: string;
+    observedAt: string;
+  }): Promise<void>;
+  messageUuidEqualityProven(experimentId: string): Promise<boolean>;
   recordCommerceEvent(event: CommerceEventRecord): Promise<CommerceRecordResult>;
   listCommerceEvents(experimentId: string): Promise<readonly CommerceEventRecord[]>;
   countReversalsAwaitingPayment(): Promise<number>;
@@ -271,6 +281,35 @@ export class D1LiveEvidenceRepository implements LiveEvidenceRepository, LiveEvi
     }));
   }
 
+  async recordAttributionProof(input: {
+    experimentId: string;
+    outcome: "MATCH" | "NO_MATCH";
+    paymentMessageUuid: string;
+    confirmedMessageUuid: string;
+    observedAt: string;
+  }): Promise<void> {
+    await this.requireExperiment(input.experimentId);
+    await this.db.prepare(
+      `INSERT INTO attribution_proofs (
+         experiment_id, creator_uuid, outcome, payment_message_uuid,
+         confirmed_message_uuid, observed_at
+       ) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(experiment_id) DO NOTHING`,
+    ).bind(
+      input.experimentId, this.creatorUuid, input.outcome, input.paymentMessageUuid,
+      input.confirmedMessageUuid, input.observedAt,
+    ).run();
+  }
+
+  async messageUuidEqualityProven(experimentId: string): Promise<boolean> {
+    await this.requireExperiment(experimentId);
+    const row = await this.db.prepare(
+      `SELECT outcome FROM attribution_proofs
+       WHERE experiment_id = ? AND creator_uuid = ?`,
+    ).bind(experimentId, this.creatorUuid).first<{ outcome: "MATCH" | "NO_MATCH" }>();
+    return row?.outcome === "MATCH";
+  }
+
   async getAttributionContext(experimentId: string): Promise<AttributionContext> {
     await this.requireExperiment(experimentId);
     const messages = await this.db.prepare(
@@ -297,8 +336,8 @@ export class D1LiveEvidenceRepository implements LiveEvidenceRepository, LiveEvi
 
     const classify = async (): Promise<CommerceRecordResult | null> => {
       const existing = await this.db.prepare(
-        `SELECT payload_hash FROM commerce_events WHERE source = 'FANVUE_WEBHOOK' AND event_id = ?`,
-      ).bind(event.eventId).first<{ payload_hash: string }>();
+        `SELECT payload_hash FROM commerce_events WHERE source = ? AND event_id = ?`,
+      ).bind(event.source, event.eventId).first<{ payload_hash: string }>();
       if (existing) return existing.payload_hash === event.payloadHash ? "DUPLICATE" : "EVENT_ID_REUSED";
       if (event.kind === "PAYMENT") {
         const payment = await this.db.prepare(
@@ -321,10 +360,10 @@ export class D1LiveEvidenceRepository implements LiveEvidenceRepository, LiveEvi
          purchaser_uuid, message_uuid, message_type, attribution_strategy, message_matched,
          experiment_id, arm, gross_minor, net_minor,
          amount_minor, currency, occurred_at, payload_hash, received_at
-       ) VALUES ('FANVUE_WEBHOOK', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT DO NOTHING`,
     ).bind(
-      event.eventId, event.creatorUuid, event.kind, event.paymentId,
+      event.source, event.eventId, event.creatorUuid, event.kind, event.paymentId,
       reversal?.reversalId ?? null, reversal?.reversalType ?? null,
       payment?.purchaserUuid ?? null, payment?.messageUuid ?? null,
       payment?.messageType ?? null, payment?.attributionStrategy ?? null,
@@ -527,6 +566,7 @@ function reconciliationFromRow(row: Row): ReconciliationRecord {
 
 function commerceFromRow(row: Row): CommerceEventRecord {
   const common = {
+    source: row.source as "FANVUE_WEBHOOK" | "SEEDED_FIXTURE",
     eventId: String(row.event_id),
     creatorUuid: String(row.creator_uuid),
     paymentId: String(row.payment_id),

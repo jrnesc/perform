@@ -126,34 +126,6 @@ describe("D1PerformRepository", () => {
     ).rejects.toThrow(/did not match persisted assignments/);
   });
 
-  it("recognises an identical webhook retry without writing it twice", async () => {
-    const database = new FakeDatabase();
-    database.firstRows.push(experimentRow, {
-      event_type: "creator.payment.succeeded",
-      payload_hash: "payload-hash",
-      processed_at: "2026-10-20T10:03:00.000Z",
-    });
-    const repository = new D1PerformRepository(database, "creator-1", "REAL");
-
-    await expect(
-      repository.recordPurchaseEvent({
-        source: "FANVUE",
-        eventId: "event-1",
-        eventType: "creator.payment.succeeded",
-        payloadHash: "payload-hash",
-        experimentId: "experiment-1",
-        arm: "A",
-        purchaserUuid: "fan-1",
-        externalMessageUuid: "message-1",
-        grossMinor: 1000,
-        currency: "USD",
-        occurredAt: "2026-10-20T10:03:00.000Z",
-        receivedAt: "2026-10-20T10:03:01.000Z",
-      }),
-    ).resolves.toBe("DUPLICATE");
-    expect(database.batches).toHaveLength(0);
-  });
-
   it("scopes an experiment result read by experiment, creator and provenance", async () => {
     const database = new FakeDatabase();
     database.firstRows.push(experimentRow);
@@ -165,14 +137,4 @@ describe("D1PerformRepository", () => {
     expect(statement.values).toEqual(["experiment-1", "creator-1", "REAL"]);
   });
 
-  it("normalizes and deduplicates purchase reversal evidence", async () => {
-    const database = new FakeDatabase();
-    const repository = new D1PerformRepository(database, "creator-1", "REAL");
-    await expect(repository.recordPurchaseReversal({
-      source: "FANVUE", eventId: "refund-1", eventType: "creator.refund.created", payloadHash: "hash",
-      purchaseSource: "FANVUE", purchaseEventId: "payment-1", kind: "REFUND", amountMinor: 1200,
-      occurredAt: "2026-10-20T11:00:00.000Z", receivedAt: "2026-10-20T11:00:01.000Z",
-    })).resolves.toBe("RECORDED");
-    expect(database.batches.at(-1)![1].query).toContain("INSERT INTO purchase_reversals");
-  });
 });

@@ -1,5 +1,10 @@
 import type { Arm } from "../domain/allocation";
-import { audienceEvidenceRowVersion, type AudienceEvidenceRow } from "../persistence/live-evidence";
+import { projectResultPurchases } from "../live/commerce-projection";
+import {
+  audienceEvidenceRowVersion,
+  type AudienceEvidenceRow,
+  type CommerceEventRecord,
+} from "../persistence/live-evidence";
 import { memberEvidenceFromRow } from "./audience-evidence";
 import type { AudienceMemberEvidence, DemoResultFixture, ResultAssignment, ResultPurchase } from "./contracts";
 
@@ -187,7 +192,54 @@ const seededRelationshipPattern = [
 const day = 86_400_000;
 
 function enrichAudience(fixture: DemoResultFixture): DemoResultFixture {
-  if (!dashboardExperimentIds.has(fixture.experimentId)) return fixture;
+  const creatorUuid = "demo:creator:perform";
+  const commerceEvents = fixture.purchases.flatMap((purchase): CommerceEventRecord[] => {
+    const payment: CommerceEventRecord = {
+      source: "SEEDED_FIXTURE",
+      kind: "PAYMENT",
+      eventId: `seed:event:${purchase.id}`,
+      creatorUuid,
+      paymentId: purchase.id,
+      purchaserUuid: purchase.fanUuid,
+      messageUuid: `demo:message:${purchase.arm.toLowerCase()}`,
+      messageType: "BROADCAST",
+      attributionStrategy: "ASSIGNMENT_WINDOW",
+      messageMatched: true,
+      experimentId: fixture.experimentId,
+      arm: purchase.arm,
+      grossMinor: purchase.grossMinor,
+      netMinor: null,
+      currency: "USD",
+      occurredAt: purchase.occurredAt,
+      payloadHash: `seed:payment:${purchase.id}`,
+      receivedAt: purchase.occurredAt,
+    };
+    const reversalType = purchase.refundedMinor > 0 ? "REFUND" as const
+      : purchase.disputedMinor > 0 ? "DISPUTE" as const : null;
+    if (!reversalType) return [payment];
+    const reversal: CommerceEventRecord = {
+      source: "SEEDED_FIXTURE",
+      kind: "REVERSAL",
+      eventId: `seed:event:${purchase.id}:${reversalType.toLowerCase()}`,
+      creatorUuid,
+      paymentId: purchase.id,
+      reversalId: `seed:reversal:${purchase.id}`,
+      reversalType,
+      amountMinor: reversalType === "REFUND" ? purchase.refundedMinor : purchase.disputedMinor,
+      currency: "USD",
+      occurredAt: fixture.observation.observedAt,
+      payloadHash: `seed:reversal:${purchase.id}`,
+      receivedAt: fixture.observation.observedAt,
+    };
+    return [payment, reversal];
+  });
+  const projectedPurchases = projectResultPurchases({
+    experimentId: fixture.experimentId,
+    events: commerceEvents,
+    assignments: Object.fromEntries(fixture.assignments.map((row) => [row.fanUuid, row.arm])),
+  });
+  const withCommerce = { ...fixture, commerceEvents, purchases: projectedPurchases };
+  if (!dashboardExperimentIds.has(fixture.experimentId)) return withCommerce;
   const capturedAt = fixture.observation.startedAt;
   const frozenAudience = fixture.assignments.map((assignment, index): AudienceEvidenceRow => {
     const priorSettledPurchaseCount = index % 2 === 0 ? 0 : index % 4 === 1 ? 1 : 3;
@@ -211,7 +263,7 @@ function enrichAudience(fixture: DemoResultFixture): DemoResultFixture {
     };
   });
   const audienceEvidence = frozenAudience.map((row): AudienceMemberEvidence => {
-    const attributed = fixture.purchases.filter((purchase) => purchase.fanUuid === row.fanUuid);
+    const attributed = projectedPurchases.filter((purchase) => purchase.fanUuid === row.fanUuid);
     const settled = attributed.filter((purchase) => purchase.grossMinor - purchase.refundedMinor - purchase.disputedMinor > 0);
     return memberEvidenceFromRow(row, "DEMO", {
       converted: settled.length > 0,
@@ -224,7 +276,7 @@ function enrichAudience(fixture: DemoResultFixture): DemoResultFixture {
       lastOutcomeAt: attributed.at(-1)?.occurredAt,
     });
   });
-  return { ...fixture, frozenAudience, audienceEvidence };
+  return { ...withCommerce, frozenAudience, audienceEvidence };
 }
 
 export const DEMO_RESULT_FIXTURES: readonly DemoResultFixture[] = RAW_DEMO_RESULT_FIXTURES.map(enrichAudience);

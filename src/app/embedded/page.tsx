@@ -3,11 +3,12 @@
 import { AuthProvider, useAuth, useEmbeddedAuth } from "@fanvue/builder-sdk/react";
 import { Drama } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ExperimentVariable, VariantDefinition } from "../../domain/experiment-state";
 import type { AudienceSnapshot, DryRunPlan, ExperimentReview } from "../../experiments/contracts";
 import type { MediaAsset, MediaPage, WorkspaceKind } from "../../workspace/contracts";
-import { ProgressStrip, StageIcon } from "./experiment-experience";
+import { ProgressStrip, SectionIcon, StageIcon, WatchfulEyeIcon, WritingPenIcon } from "./experiment-experience";
 import { ExperimentHistory, previewHistoryStorageKey } from "./experiment-history";
 
 type WorkspaceResponse = {
@@ -26,6 +27,11 @@ type PersistedDryRunResponse = {
   plan: DryRunPlan;
   persistence: { database: "demo" | "preview"; state: "ALLOCATED"; saved: true };
 };
+type LaunchResponse = {
+  provenance: "DEMO" | "REAL";
+  externalRequests?: number;
+  result: { status: "RUNNING" | "OPERATOR_REVIEW" | "RETRYABLE" | "INVALID"; scheduledAt: string; reason?: string };
+};
 type LoadState<T> =
   | { kind: "loading" }
   | { kind: "ready"; data: T }
@@ -41,9 +47,9 @@ function AssetMark({ type }: { type: MediaAsset["mediaType"] }) {
   return <span className="asset-mark" aria-hidden="true">{type.slice(0, 1).toUpperCase()}</span>;
 }
 
-function BroadcastPreview({ arm, variant, asset, recipients }: { arm: "A" | "B"; variant: VariantDefinition; asset: MediaAsset; recipients: number }) {
+function BroadcastPreview({ variant, asset, recipients }: { variant: VariantDefinition; asset: MediaAsset; recipients: number }) {
   return <article className="broadcast-preview">
-    <header><div><span className="broadcast-avatar" aria-hidden="true">P</span><div><strong>Perform broadcast</strong><small>Mass message preview</small></div></div><span>Arm {arm}</span></header>
+    <header><div><span className="broadcast-avatar" aria-hidden="true">P</span><div><strong>Perform broadcast</strong><small>Mass message preview</small></div></div></header>
     <div className="broadcast-media" style={asset.thumbnailUrl ? { backgroundImage: `url(${asset.thumbnailUrl})` } : undefined}>{!asset.thumbnailUrl && <AssetMark type={asset.mediaType} />}</div>
     <div className="broadcast-body"><p>{variant.copy}</p><span className="broadcast-unlock">Unlock for {money(variant.priceMinor)}</span><small>{recipients} assigned recipients</small></div>
   </article>;
@@ -102,6 +108,13 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
   const [persisted, setPersisted] = useState(false);
   const [validation, setValidation] = useState("");
   const [advancing, setAdvancing] = useState(false);
+  const [launchConfirmed, setLaunchConfirmed] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState(() => {
+    const date = new Date(Date.now() + 5 * 60_000);
+    date.setSeconds(0, 0);
+    return date.toISOString().slice(0, 16);
+  });
+  const [launch, setLaunch] = useState<LaunchResponse | null>(null);
   const stepHeading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -183,6 +196,7 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
     setPlan(null);
     setPersisted(false);
     setValidation("");
+    setLaunch(null);
   };
 
   const retry = () => {
@@ -190,6 +204,12 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
     setAudiences({ kind: "loading" });
     setReload((value) => value + 1);
   };
+
+  const canContinue = Boolean(name.trim()) &&
+    (step !== 0 || Boolean(selectedAudience)) &&
+    (step !== 1 || Boolean(selectedAsset)) &&
+    (step !== 2 || Boolean(hypothesis.trim())) &&
+    (step !== 4 || preview || launchConfirmed);
 
   const continueSetup = async () => {
     setValidation("");
@@ -201,7 +221,7 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
       if (!selectedAudience || !selectedAsset) return setValidation("Audience and asset are required.");
       try {
         setAdvancing(true);
-        const response = await authFetch("/api/experiments/dry-run", {
+        const response = await authFetch(workspace === "real" && !preview ? "/api/experiments/prepare" : "/api/experiments/dry-run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -248,7 +268,30 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
     }
     if (step === 4) {
       if (!review || !plan || !persisted) return setValidation("The experiment review is still being prepared.");
-      router.push(`${preview ? "/preview" : "/embedded"}/experiments/${encodeURIComponent(review.experimentId)}`);
+      if (preview) {
+        router.push(`/preview/experiments/${encodeURIComponent(review.experimentId)}`);
+        return;
+      }
+      if (!launchConfirmed) return setValidation("Confirm that both paid messages and their exact effects are correct.");
+      try {
+        setAdvancing(true);
+        const response = await authFetch("/api/experiments/launch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            experimentId: review.experimentId,
+            workspace,
+            scheduledAt: new Date(scheduledAt).toISOString(),
+            confirmed: true,
+          }),
+        });
+        const body = await responseBody<LaunchResponse>(response);
+        setLaunch(body);
+      } catch (caught) {
+        setValidation(caught instanceof Error ? caught.message : "The launch could not continue.");
+      } finally {
+        setAdvancing(false);
+      }
       return;
     }
     setStep((value) => Math.min(value + 1, steps.length - 1));
@@ -257,7 +300,7 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
   return (
     <main data-theme={theme ?? "light"}>
       <header className="masthead">
-        <div className="brand-lockup"><span className="brand-mark" aria-hidden="true"><Drama size={19} strokeWidth={2.2} /></span><div><strong>Perform</strong><span>Offer experiments</span></div></div>
+        <Link className="brand-lockup history-brand" href={preview ? "/preview" : "/embedded"}><span className="brand-mark" aria-hidden="true"><Drama size={19} strokeWidth={2.2} /></span><div><strong>Perform</strong><span>Offer experiments</span></div></Link>
         {status === "authenticated" && <span className="connection"><i /> {preview ? "Local preview" : "Connected to Fanvue"}</span>}
       </header>
 
@@ -267,27 +310,26 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
 
       {status === "authenticated" && <div className="workspace-shell setup-shell">
         <section className="hero compact-hero">
-          <div><p className="eyebrow">New experiment</p><h1>{name.trim() || "Untitled experiment"}</h1><p className="lede">Build a fair A/B test, review every stage, then inspect the evidence. Nothing is sent from this build.</p></div>
+          <div><nav className="breadcrumbs" aria-label="Breadcrumb"><Link href={preview ? "/preview" : "/embedded"}>Experiments</Link><span>/</span><span>New experiment</span></nav><h1 className="title-edit"><label className="sr-only" htmlFor="experiment-name">Experiment name</label><input id="experiment-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="Name your experiment" autoComplete="off" /><WritingPenIcon /></h1><p className={`title-hint ${name.trim() ? "done" : ""}`}>{name.trim() ? "Click the title any time to rename." : "Click the title to name this experiment — required to continue."}</p><p className="lede">Build a fair A/B test, review every effect, then deliberately schedule both arms together.</p></div>
           {demoAvailable && !preview && <div className="workspace-switch" role="group" aria-label="Data workspace"><button aria-pressed={workspace === "real"} className={workspace === "real" ? "active" : ""} onClick={() => chooseWorkspace("real")}>Live</button><button aria-pressed={workspace === "demo"} className={workspace === "demo" ? "active" : ""} onClick={() => chooseWorkspace("demo")}>Seeded demo</button></div>}
         </section>
 
         <ProgressStrip current={step} />
 
         <section className="setup-flow">
-          <section className="flow-stage naming-stage" aria-labelledby="experiment-name-heading"><div className="flow-stage-heading"><div><h2 id="experiment-name-heading">Name</h2></div></div><label className="field"><span>Experiment name</span><input value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="e.g. October welcome offer" /><small>A required creator-facing label, separate from the hypothesis and stable experiment ID.</small></label></section>
           {step >= 0 && <section className="flow-stage" aria-labelledby="stage-audience">
-            <div className="flow-stage-heading"><div><StageIcon stage="Audience" decorative animateOnAppear={step === 0} /><h2 id="stage-audience" ref={step === 0 ? stepHeading : undefined} tabIndex={-1}>Audience</h2></div></div>
+            <div className="flow-stage-heading"><div><StageIcon stage="Audience" decorative continuous /><h2 id="stage-audience" ref={step === 0 ? stepHeading : undefined} tabIndex={-1}>Audience</h2></div></div>
             {audiences.kind === "loading" && <div className="loading-lines" role="status" aria-busy="true"><span className="sr-only">Loading audience options</span><i /><i /><i /></div>}
             {audiences.kind === "error" && <div className="empty-state compact-empty"><h3>{audiences.code === "live_audience_deferred" ? "Live audience setup is deliberately unavailable" : "Audience data is unavailable"}</h3><p>{audiences.message}</p>{audiences.demoAvailable && workspace === "real" && <button className="primary" onClick={() => chooseWorkspace("demo")}>Use seeded demo audience</button>}{workspace === "demo" && <button className="secondary" onClick={retry}>Try again</button>}</div>}
             {audiences.kind === "ready" && audiences.data.audiences.length === 0 && <div className="empty-state compact-empty"><h3>No eligible audiences</h3><p>There is nothing safe to allocate in this workspace.</p></div>}
             {audiences.kind === "ready" && <div className="choice-grid">{audiences.data.audiences.map((audience) => {
               const excluded = audience.exclusions.reduce((total, item) => total + item.count, 0);
-              return <button aria-pressed={audienceId === audience.id} className={`choice-card ${audienceId === audience.id ? "selected" : ""}`} key={audience.id} onClick={() => setAudienceId(audience.id)}><span className="choice-check" aria-hidden="true">{audienceId === audience.id ? "✓" : ""}</span><strong>{audience.name}</strong><p>{audience.description}</p><small>{audience.members.length} eligible · {excluded} excluded · {audience.provenance.fixtureVersion}</small></button>;
+              return <button aria-pressed={audienceId === audience.id} className={`choice-card ${audienceId === audience.id ? "selected" : ""}`} key={audience.id} onClick={() => setAudienceId(audience.id)}><span className="choice-check" aria-hidden="true">{audienceId === audience.id ? "✓" : ""}</span><strong>{audience.name}</strong><p>{audience.description}</p><small>{audience.provenance.kind === "FANVUE" ? "Members frozen at review" : `${audience.members.length} eligible · ${excluded} excluded`} ·{audience.provenance.kind === "DEMO_SEEDED" ? audience.provenance.fixtureVersion : audience.provenance.label}</small></button>;
             })}</div>}
           </section>}
 
           {step >= 1 && <section className="flow-stage" aria-labelledby="stage-asset">
-            <div className="flow-stage-heading"><div><StageIcon stage="Asset" decorative animateOnAppear={step === 1} /><h2 id="stage-asset" ref={step === 1 ? stepHeading : undefined} tabIndex={-1}>Asset</h2></div></div>
+            <div className="flow-stage-heading"><div><StageIcon stage="Asset" decorative continuous /><h2 id="stage-asset" ref={step === 1 ? stepHeading : undefined} tabIndex={-1}>Asset</h2></div></div>
             {media.kind === "loading" && <div className="asset-grid" role="status" aria-busy="true"><span className="sr-only">Loading Vault assets</span>{Array.from({ length: 3 }, (_, index) => <div className="asset-card skeleton" aria-hidden="true" key={index} />)}</div>}
             {media.kind === "error" && <div className="empty-state compact-empty"><h3>Vault assets are unavailable</h3><p>{media.message}</p><button className="secondary" onClick={retry}>Try again</button></div>}
             {media.kind === "ready" && media.data.page.items.length === 0 && <div className="empty-state compact-empty"><AssetMark type="image" /><h3>No ready Vault assets</h3><p>Upload media in Fanvue, or use the authorised demo workspace.</p>{media.data.capabilities.demoAvailable && <button className="primary" onClick={() => chooseWorkspace("demo")}>Use seeded demo assets</button>}</div>}
@@ -295,7 +337,7 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
           </section>}
 
           {step >= 2 && <section className="flow-stage" aria-labelledby="stage-question">
-            <div className="flow-stage-heading"><div><StageIcon stage="Question" decorative animateOnAppear={step === 2} /><h2 id="stage-question" ref={step === 2 ? stepHeading : undefined} tabIndex={-1}>Question</h2></div></div>
+            <div className="flow-stage-heading"><div><StageIcon stage="Question" decorative continuous /><h2 id="stage-question" ref={step === 2 ? stepHeading : undefined} tabIndex={-1}>Question</h2></div></div>
             <div className="form-stack">
               <fieldset><legend>What should change?</legend><label className="radio-card"><input type="radio" checked={variable === "COPY"} onChange={() => setVariable("COPY")} /><span><strong>Copy only</strong><small>Primary metric: purchases per assigned recipient</small></span></label><label className="radio-card"><input type="radio" checked={variable === "PRICE"} onChange={() => setVariable("PRICE")} /><span><strong>Price only</strong><small>Primary metric: revenue per assigned recipient</small></span></label></fieldset>
               <label className="field"><span>Hypothesis</span><textarea value={hypothesis} onChange={(event) => setHypothesis(event.target.value)} maxLength={280} /><small>Describe what you expect and why. This does not affect allocation.</small></label>
@@ -303,38 +345,52 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
           </section>}
 
           {step >= 3 && <section className="flow-stage" aria-labelledby="stage-variants">
-            <div className="flow-stage-heading"><div><StageIcon stage="Variants" decorative animateOnAppear={step === 3} /><h2 id="stage-variants" ref={step === 3 ? stepHeading : undefined} tabIndex={-1}>Variants</h2></div></div>
+            <div className="flow-stage-heading"><div><StageIcon stage="Variants" decorative continuous /><h2 id="stage-variants" ref={step === 3 ? stepHeading : undefined} tabIndex={-1}>Variants</h2></div></div>
             <div className="variant-grid">
               <article className="variant-card"><p className="eyebrow">Arm A · Control</p><label className="field"><span>Message copy</span><textarea value={copyA} onChange={(event) => setCopyA(event.target.value)} maxLength={5000} /></label><label className="field"><span>Price</span><span className="price-field"><span aria-hidden="true">$</span><input aria-label="Arm A price in US dollars" type="number" min={3} step="0.01" value={priceA / 100} onChange={(event) => setPriceA(Math.round(Number(event.target.value) * 100))} /></span></label></article>
               <article className="variant-card"><p className="eyebrow">Arm B · Variant</p><label className="field"><span>Message copy</span><textarea value={variable === "PRICE" ? copyA : copyB} onChange={(event) => setCopyB(event.target.value)} maxLength={5000} disabled={variable === "PRICE"} /></label><label className="field"><span>Price</span><span className="price-field"><span aria-hidden="true">$</span><input aria-label="Arm B price in US dollars" type="number" min={3} step="0.01" value={(variable === "COPY" ? priceA : priceB) / 100} onChange={(event) => setPriceB(Math.round(Number(event.target.value) * 100))} disabled={variable === "COPY"} /></span></label></article>
             </div>
           </section>}
 
-          {step >= 4 && review && <section className="flow-stage" aria-labelledby="stage-review">
-            <div className="flow-stage-heading"><div><StageIcon stage="Review" decorative animateOnAppear={step === 4} /><h2 id="stage-review" ref={step === 4 ? stepHeading : undefined} tabIndex={-1}>Review</h2></div></div>
+          {step >= 4 && review && plan && <section className="flow-stage" aria-labelledby="stage-review">
+            <div className="flow-stage-heading"><div><StageIcon stage="Review" decorative continuous /><h2 id="stage-review" ref={step === 4 ? stepHeading : undefined} tabIndex={-1}>Review</h2></div></div>
             <div className="review-grid">
               <article className="signature-diff"><p className="eyebrow">Exact difference · one field</p><h3>{review.exactDifference.label}</h3><div><span>A</span><p>{review.exactDifference.armA}</p></div><div><span>B</span><p>{review.exactDifference.armB}</p></div></article>
               <div className="stat-grid"><article><strong>{review.armCounts.A}</strong><span>Arm A</span></article><article><strong>{review.armCounts.B}</strong><span>Arm B</span></article><article><strong>{review.overlapCount}</strong><span>Overlap</span></article><article><strong>{review.excludedCount}</strong><span>Excluded</span></article></div>
               <dl className="review-list"><div><dt>Audience</dt><dd>{review.draft.audience.name}</dd></div><div><dt>Asset</dt><dd>{review.draft.asset.name}</dd></div><div><dt>Price</dt><dd>{review.draft.variants.map((variant) => `Arm ${variant.arm} ${money(variant.priceMinor)}`).join(" · ")}</dd></div><div><dt>Metric</dt><dd>{variable === "COPY" ? "Purchases / assigned recipient" : "Revenue / assigned recipient"}</dd></div><div><dt>Snapshot</dt><dd><code>{review.snapshotHash.slice(0, 20)}…</code></dd></div><div><dt>Allocator</dt><dd>{review.assignments[0]?.algorithmVersion}</dd></div><div><dt>Persistence</dt><dd>{persisted ? preview ? "Preview memory only" : "Saved · isolated demo D1" : "Preparing…"}</dd></div></dl>
             </div>
             <section className="broadcast-review" aria-labelledby="broadcast-review-title">
-              <div><p className="eyebrow">Broadcast preview</p><h3 id="broadcast-review-title">What each audience will receive</h3><p>Compare the two mass messages exactly as recipients would see them.</p></div>
+              <div className="section-head"><div className="flow-stage-heading"><div><SectionIcon section="preview" /><h2 id="broadcast-review-title">What each audience will receive</h2></div></div><p>Compare the two mass messages exactly as recipients would see them.</p></div>
               <div className="broadcast-grid">{(["A", "B"] as const).map((arm) => {
                 const variant = review.draft.variants.find((item) => item.arm === arm);
-                return variant ? <BroadcastPreview key={arm} arm={arm} variant={variant} asset={review.draft.asset} recipients={review.armCounts[arm]} /> : null;
+                return variant ? <figure className="broadcast-arm" key={arm}><figcaption>Arm {arm}</figcaption><BroadcastPreview variant={variant} asset={review.draft.asset} recipients={review.armCounts[arm]} /></figure> : null;
               })}</div>
             </section>
+            {!preview && <section className="launch-confirmation" aria-labelledby="launch-confirmation-title">
+              <div className="section-head"><div className="flow-stage-heading"><div><SectionIcon section="launch" /><h2 id="launch-confirmation-title">Schedule both arms together</h2></div></div><p>Perform will create one frozen custom list per arm, add members in batches of up to 100, verify exact membership, then schedule both paid mass messages.</p></div>
+              <label className="field schedule-field"><span>Scheduled delivery</span><small>Both messages are delivered at this time, in your local time zone. You can cancel until then.</small><input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
+              <dl className="launch-effects"><div><dt>Lists</dt><dd>2 custom lists · {review.armCounts.A} in A · {review.armCounts.B} in B</dd></div><div><dt>Member batches</dt><dd>{plan.summary.memberBatches}, each no larger than 100</dd></div><div><dt>Messages</dt><dd>2 scheduled paid mass messages · same delivery time</dd></div><div><dt>Media</dt><dd>{review.draft.asset.name}</dd></div></dl>
+              <p className="charge-warning"><WatchfulEyeIcon />Fans who unlock either message will be charged the displayed price.</p>
+              {launch && <div className={`launch-outcome ${launch.result.status === "RUNNING" ? "success" : "warning"}`} role="status"><strong>{launch.result.status === "RUNNING" ? "Both messages are scheduled." : "Launch needs attention."}</strong><p>{launch.provenance === "DEMO" ? "Seeded demo: the full flow was recorded with zero Fanvue calls." : `REAL launch · ${launch.result.status.toLowerCase().replaceAll("_", " ")}`}{launch.result.reason ? ` ${launch.result.reason}` : ""}</p>{launch.result.status === "RUNNING" && <button type="button" className="secondary" onClick={async () => {
+                try {
+                  setAdvancing(true);
+                  await responseBody(await authFetch("/api/experiments/launch", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ experimentId: review.experimentId, workspace }) }));
+                  setLaunch(null);
+                  setValidation("Scheduled delivery cancelled and custom lists removed.");
+                } catch (caught) { setValidation(caught instanceof Error ? caught.message : "Cancellation failed."); }
+                finally { setAdvancing(false); }
+              }}>Cancel before delivery</button>}</div>}
+            </section>}
           </section>}
 
           <footer className="setup-actions">
             <div className="action-notice" aria-live="polite">
+              {step === 4 && !preview && <label className={`confirm-box-field ${launchConfirmed ? "checked" : ""}`}><input type="checkbox" checked={launchConfirmed} disabled={Boolean(launch)} onChange={(event) => setLaunchConfirmed(event.target.checked)} /><span className="confirm-check" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5l3 3 6-6.5" /></svg></span><span>I confirm the recipients, copy, media, prices and scheduled time shown above.</span></label>}
               {validation
                 ? <p className="validation" role="alert">{validation}</p>
-                : step === 0 && selectedAudience
-                  ? <div className="evidence-strip"><strong>Eligibility snapshot</strong><span>{selectedAudience.sourceCount} source rows</span><span>{selectedAudience.members.length} eligible</span>{selectedAudience.exclusions.map((item) => <span key={item.reason}>{item.count} {item.reason.toLowerCase().replaceAll("_", " ")}</span>)}</div>
-                  : null}
+                : null}
             </div>
-            <button className="primary" disabled={advancing} aria-busy={advancing} onClick={continueSetup}>{advancing ? "Working…" : step === 4 ? "Open experiment" : "Continue"}</button>
+            <button className="primary" disabled={advancing || Boolean(launch) || !canContinue} aria-busy={advancing} onClick={continueSetup}>{advancing ? "Working…" : step === 4 ? preview ? "Open experiment" : "Confirm and schedule" : "Continue"}</button>
           </footer>
         </section>
       </div>}
@@ -342,7 +398,30 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
   );
 }
 
+/** The entry screen receives Fanvue's one-time `?token=`; exchanging it here stores the session for later screens. */
+function AuthenticatedHistory() {
+  useEmbeddedAuth();
+  return <ExperimentHistory preview={false} />;
+}
+
+let staleSessionChecked = false;
+
+/**
+ * A fresh `?token=` from the Fanvue launcher must win over a session stored by an earlier visit.
+ * Only the first render of a page load may look: during client-side navigation the address bar
+ * still shows the previous URL, and discarding then would wipe the session just created.
+ */
+function discardStaleSession() {
+  if (typeof window === "undefined" || staleSessionChecked) return true;
+  staleSessionChecked = true;
+  try {
+    if (new URL(window.location.href).searchParams.get("token")) window.sessionStorage.removeItem("fanvue:jwt");
+  } catch { /* storage unavailable: nothing to discard */ }
+  return true;
+}
+
 export default function EmbeddedPage({ preview = false, screen = "history" }: { preview?: boolean; screen?: "history" | "setup" }) {
-  if (screen === "history") return <ExperimentHistory preview={preview} />;
+  useState(discardStaleSession);
+  if (screen === "history") return preview ? <ExperimentHistory preview /> : <AuthProvider><AuthenticatedHistory /></AuthProvider>;
   return <AuthProvider><PerformWorkspace preview={preview} /></AuthProvider>;
 }

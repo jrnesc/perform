@@ -1,5 +1,6 @@
 import type { Arm } from "../domain/allocation";
 import type { EvidenceProjection } from "../integrations/fanvue/creator-evidence";
+import type { ResultPurchase } from "../results/contracts";
 import {
   countsTowardArms,
   type AttributionContext,
@@ -17,6 +18,45 @@ export type ExperimentCommerceProjection = {
 };
 
 type Payment = Extract<CommerceEventRecord, { kind: "PAYMENT" }>;
+
+/**
+ * The single invoice-level projection used by seeded and live Results. Stored events are replayed
+ * by payment ID, so delivery order is irrelevant and a reversal received first still settles the
+ * same purchase. Only payments accepted by the attribution strategy and matching the frozen
+ * assignment are returned.
+ */
+export function projectResultPurchases(input: {
+  experimentId: string;
+  events: readonly CommerceEventRecord[];
+  assignments: Readonly<Record<string, Arm>>;
+}): readonly ResultPurchase[] {
+  const reversals = new Map<string, Extract<CommerceEventRecord, { kind: "REVERSAL" }>[]>()
+  for (const event of input.events) {
+    if (event.kind === "REVERSAL") {
+      reversals.set(event.paymentId, [...(reversals.get(event.paymentId) ?? []), event])
+    }
+  }
+  return input.events
+    .filter((event): event is Payment => event.kind === "PAYMENT")
+    .filter((event) => event.experimentId === input.experimentId && countsTowardArms(event))
+    .filter((event) => input.assignments[event.purchaserUuid] === event.arm)
+    .map((event) => {
+      const related = reversals.get(event.paymentId) ?? []
+      const amount = (kind: "REFUND" | "DISPUTE") => related
+        .filter((reversal) => reversal.reversalType === kind)
+        .reduce((total, reversal) => total + (reversal.amountMinor ?? event.grossMinor), 0)
+      return {
+        id: event.paymentId,
+        fanUuid: event.purchaserUuid,
+        arm: event.arm,
+        grossMinor: event.grossMinor,
+        refundedMinor: Math.min(event.grossMinor, amount("REFUND")),
+        disputedMinor: Math.min(event.grossMinor, amount("DISPUTE")),
+        occurredAt: event.occurredAt,
+      }
+    })
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id))
+}
 
 /**
  * Deterministic replay of stored events. Order of arrival cannot matter: reversals are joined to

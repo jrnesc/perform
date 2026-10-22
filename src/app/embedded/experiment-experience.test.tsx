@@ -98,6 +98,12 @@ describe("Experiment setup progress", () => {
     expect(container.querySelectorAll('[data-animate-on-appear="true"]')).toHaveLength(2);
     expect(screen.getByLabelText("Asset, current").querySelector('[data-animate-on-appear="true"]')).not.toBeNull();
   });
+
+  it("keeps the progress strip still but loops continuous heading icons", () => {
+    const { container } = render(<><ProgressStrip current={1} /><StageIcon stage="Asset" decorative continuous /></>);
+    expect(container.querySelectorAll(".stage-icon svg")).toHaveLength(6);
+    expect(screen.getByLabelText("Asset, current").querySelector('[data-animate-on-appear="true"]')).not.toBeNull();
+  });
 });
 
 describe("Results navigation and markup", () => {
@@ -130,7 +136,10 @@ describe("Results navigation and markup", () => {
 describe("Aggregate results comparison", () => {
   it("switches compatible metrics while keeping exact values and denominators in a table", () => {
     const result = analyseResult(DEMO_RESULT_FIXTURES[0]);
-    render(<ResultComparison result={result} />);
+    const { container } = render(<ResultComparison result={result} />);
+    const chart = screen.getByRole("img", { name: /Primary outcome for Arm A and Arm B/ });
+    expect(chart.getAttribute("aria-label")).toMatch(/Aggregate-only grouped bar chart/);
+    expect(container.querySelector(".comparison-chart title")).toBeNull();
     expect(screen.getByText(/No temporal buckets exist/)).not.toBeNull();
     const revenue = screen.getByRole("radio", { name: "Settled revenue" });
     fireEvent.click(revenue);

@@ -47,16 +47,10 @@ function parseVariants(raw: unknown, mediaUuid: string): readonly VariantDefinit
   });
 }
 
-async function sha256(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 async function persistDryRun(
   database: SqlDatabase,
   creatorUuid: string,
   review: Awaited<ReturnType<typeof buildExperimentReview>>,
-  plan: ReturnType<typeof buildDryRunPlan>,
 ) {
   const repository = new D1PerformRepository(database, creatorUuid, "DEMO");
   let experiment = await repository.getExperiment(review.experimentId);
@@ -121,21 +115,6 @@ async function persistDryRun(
     throw new Error("Persisted snapshot evidence does not match the review");
   }
 
-  const messageEffects = plan.effects.filter((effect) => effect.id.startsWith("send-message-"));
-  await repository.createSendIntents(await Promise.all(messageEffects.map(async (effect) => {
-    const arm = effect.id.endsWith("-a") ? "A" as const : "B" as const;
-    const payloadJson = JSON.stringify(effect.body);
-    return {
-      id: `${review.experimentId}:intent:${arm}`,
-      experimentId: review.experimentId,
-      arm,
-      idempotencyKey: effect.headers?.["Idempotency-Key"] ?? `${review.experimentId}:${arm}`,
-      payloadJson,
-      payloadHash: await sha256(payloadJson),
-      createdAt: occurredAt,
-    };
-  })));
-
   return { database: "demo", state: "ALLOCATED" as const, saved: true };
 }
 
@@ -152,10 +131,6 @@ export async function POST(request: Request) {
   )) {
     return jsonError(403, "demo_forbidden", "This verified creator is not authorised for the demo workspace.");
   }
-  if ((process.env.PERFORM_WRITE_MODE ?? "disabled") !== "disabled") {
-    return jsonError(503, "write_mode_refused", "Phase 3 persistence requires PERFORM_WRITE_MODE=disabled.");
-  }
-
   try {
     const body = await request.json() as RequestBody;
     if (typeof body.id !== "string" || typeof body.name !== "string") {
@@ -190,7 +165,6 @@ export async function POST(request: Request) {
       env.PERFORM_DEMO_DB as unknown as SqlDatabase,
       session.userUuid,
       review,
-      plan,
     );
     return NextResponse.json({ review, plan, persistence });
   } catch (error) {

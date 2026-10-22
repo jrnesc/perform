@@ -12,8 +12,15 @@ type VaultClient = Pick<FanvueClient["vault"], "getMedia" | "listMedia">;
 
 const provenance = { kind: "FANVUE", label: "Live Fanvue Vault" } as const;
 
+const previewVariants = ["thumbnail", "thumbnail_gallery", "main"] as const;
+
+/** Prefers the smallest image rendition Fanvue generated; `blurred` is never shown as a preview. */
 function thumbnail(item: VaultMediaItem): string | null {
-  return item.variants?.find((variant) => variant.variantType === "thumbnail")?.url ?? null;
+  for (const type of previewVariants) {
+    const url = item.variants?.find((variant) => variant.variantType === type)?.url;
+    if (url) return url;
+  }
+  return null;
 }
 
 function mapItem(item: VaultMediaItem): MediaAsset {
@@ -59,7 +66,7 @@ export class FanvueMediaGateway implements MediaReadGateway {
       page,
       size: pageSize,
       status: ["ready"],
-      variants: ["thumbnail"],
+      variants: [...previewVariants],
     });
     if (result.isErr()) throw mappedError(result.error);
 
@@ -80,7 +87,7 @@ export class FanvueMediaGateway implements MediaReadGateway {
         "Seeded demo identifiers cannot be sent to Fanvue.",
       );
     }
-    const result = await this.vault.getMedia(id, { variants: ["thumbnail"] });
+    const result = await this.vault.getMedia(id, { variants: [...previewVariants] });
     if (result.isErr()) {
       if (result.error.code === "API_ERROR_RESPONSE" && result.error.statusCode === 404) return null;
       throw mappedError(result.error);

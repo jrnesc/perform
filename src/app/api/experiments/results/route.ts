@@ -24,10 +24,6 @@ export async function POST(request: Request) {
   )) {
     return jsonError(403, "demo_forbidden", "This verified creator is not authorised for demo results.");
   }
-  if ((process.env.PERFORM_WRITE_MODE ?? "disabled") !== "disabled") {
-    return jsonError(503, "write_mode_refused", "Phase 4 demo results require PERFORM_WRITE_MODE=disabled.");
-  }
-
   try {
     const { env } = await getCloudflareContext({ async: true });
     if (!env.PERFORM_DEMO_DB) return jsonError(503, "database_not_configured", "The demo database is not configured.");

@@ -103,6 +103,21 @@ describe("creator commerce webhook receiver", () => {
     const row = ctx.sqlite.prepare("SELECT * FROM commerce_events").get() as Record<string, unknown>;
     expect(JSON.stringify(row)).not.toContain("must-not-persist");
     expect((await ctx.project()).projection.settledPurchases[ctx.armOf("fan-1")]).toBe(1);
+    expect(ctx.sqlite.prepare("SELECT outcome FROM attribution_proofs").get()).toEqual({ outcome: "MATCH" });
+    expect(await ctx.store.messageUuidEqualityProven(ctx.experimentId)).toBe(true);
+  });
+
+  it("records a first-purchase UUID mismatch and keeps assignment-window attribution", async () => {
+    const arm = ctx.armOf("fan-1");
+    ctx.sqlite.prepare(
+      "UPDATE experiments SET observation_started_at = '2026-10-20T11:00:00.000Z', observation_ends_at = '2026-10-20T13:00:00.000Z' WHERE id = ?",
+    ).run(ctx.experimentId);
+    expect(await ctx.receive(payment("mismatch", "fan-1", "per-recipient-message", {
+      message_type: "BROADCAST",
+    }))).toEqual({ status: 200, outcome: "RECORDED" });
+    expect(ctx.sqlite.prepare("SELECT outcome, confirmed_message_uuid FROM attribution_proofs").get())
+      .toEqual({ outcome: "NO_MATCH", confirmed_message_uuid: messageFor(arm) });
+    expect(await ctx.store.messageUuidEqualityProven(ctx.experimentId)).toBe(false);
   });
 
   it("answers the unsigned verification probe, and only that, without storing anything", async () => {
@@ -114,6 +129,14 @@ describe("creator commerce webhook receiver", () => {
     expect(await receiveUnsigned(new TextEncoder().encode(JSON.stringify(payment("p", "fan-1", "message-a")))))
       .toEqual({ status: 401, outcome: "INVALID_SIGNATURE" });
     expect(await receiveUnsigned(new TextEncoder().encode("not json"))).toEqual({ status: 401, outcome: "INVALID_SIGNATURE" });
+    // Fanvue reveals the signing secret only after creating and probing the destination.
+    expect(await receiveCreatorCommerceWebhook({
+      rawBody: probe, signature: null, nowMs, config: { ...config, signingSecret: undefined }, repository: ctx.store, newId: () => "x",
+    })).toEqual({ status: 200, outcome: "VERIFICATION" });
+    // Fanvue reveals the signing secret only after creating and probing the destination.
+    expect(await receiveCreatorCommerceWebhook({
+      rawBody: probe, signature: null, nowMs, config: { ...config, signingSecret: undefined }, repository: ctx.store, newId: () => "x",
+    })).toEqual({ status: 200, outcome: "VERIFICATION" });
     expect(ctx.count("SELECT count(*) AS n FROM commerce_events")).toBe(0);
     expect(ctx.count("SELECT count(*) AS n FROM commerce_dead_letters")).toBe(0);
   });

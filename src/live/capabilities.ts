@@ -10,6 +10,7 @@ export const liveCapabilityIds = [
   "commerce_webhook",
   "earnings_reconciliation",
   "mass_message_totals",
+  "send",
 ] as const;
 
 export type LiveCapabilityId = (typeof liveCapabilityIds)[number];
@@ -29,6 +30,8 @@ export const requiredScopes: Readonly<Record<LiveCapabilityId, readonly string[]
   earnings_reconciliation: ["read:insights"],
   /** Per-arm check against Fanvue's own mass-message totals (ADR 0015). */
   mass_message_totals: ["read:chat"],
+  /** Creating recipient lists and scheduling paid messages, with fan reads for verification. */
+  send: ["write:chat", "read:fan"],
 };
 
 export type CapabilityReport = {

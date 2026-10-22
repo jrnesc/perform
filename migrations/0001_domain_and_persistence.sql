@@ -66,6 +66,45 @@ CREATE TABLE assignments (
 CREATE INDEX assignments_experiment_arm
   ON assignments (experiment_id, arm);
 
+CREATE TABLE launch_confirmations (
+  experiment_id TEXT PRIMARY KEY REFERENCES experiments(id) ON DELETE CASCADE,
+  creator_uuid TEXT NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  confirmation_hash TEXT NOT NULL CHECK (length(confirmation_hash) = 64),
+  confirmed_at TEXT NOT NULL
+) STRICT;
+
+CREATE TABLE provisioned_lists (
+  experiment_id TEXT NOT NULL,
+  arm TEXT NOT NULL CHECK (arm IN ('A', 'B')),
+  creator_uuid TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('CREATING', 'CONFIRMED', 'UNKNOWN', 'DELETED')),
+  external_list_uuid TEXT,
+  expected_count INTEGER NOT NULL CHECK (expected_count > 0),
+  actual_count INTEGER,
+  last_error_code TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (experiment_id, arm),
+  FOREIGN KEY (experiment_id, arm) REFERENCES variants(experiment_id, arm) ON DELETE CASCADE,
+  UNIQUE (external_list_uuid),
+  CHECK (status <> 'CONFIRMED' OR external_list_uuid IS NOT NULL)
+) STRICT;
+
+CREATE TABLE provisioning_batches (
+  experiment_id TEXT NOT NULL,
+  arm TEXT NOT NULL CHECK (arm IN ('A', 'B')),
+  batch_number INTEGER NOT NULL CHECK (batch_number > 0),
+  payload_hash TEXT NOT NULL CHECK (length(payload_hash) = 64),
+  member_count INTEGER NOT NULL CHECK (member_count BETWEEN 1 AND 100),
+  status TEXT NOT NULL CHECK (status IN ('PENDING', 'CONFIRMED', 'FAILED', 'UNKNOWN')),
+  last_error_code TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (experiment_id, arm, batch_number),
+  FOREIGN KEY (experiment_id, arm) REFERENCES provisioned_lists(experiment_id, arm) ON DELETE CASCADE
+) STRICT;
+
 CREATE TABLE send_intents (
   id TEXT PRIMARY KEY,
   creator_uuid TEXT NOT NULL,
@@ -78,6 +117,9 @@ CREATE TABLE send_intents (
   external_message_uuid TEXT,
   attempted_at TEXT,
   confirmed_at TEXT,
+  scheduled_at TEXT,
+  recipient_count INTEGER CHECK (recipient_count IS NULL OR recipient_count >= 0),
+  cancelled_at TEXT,
   last_error_code TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -91,66 +133,6 @@ CREATE TABLE send_intents (
     OR (external_message_uuid IS NOT NULL AND confirmed_at IS NOT NULL)
   )
 ) STRICT;
-
-CREATE TABLE webhook_events (
-  source TEXT NOT NULL,
-  event_id TEXT NOT NULL,
-  event_type TEXT NOT NULL,
-  payload_hash TEXT NOT NULL,
-  received_at TEXT NOT NULL,
-  processed_at TEXT,
-  processing_error TEXT,
-  PRIMARY KEY (source, event_id)
-) STRICT;
-
-CREATE TABLE purchases (
-  source TEXT NOT NULL,
-  event_id TEXT NOT NULL,
-  experiment_id TEXT NOT NULL,
-  arm TEXT NOT NULL CHECK (arm IN ('A', 'B')),
-  purchaser_uuid TEXT NOT NULL,
-  external_message_uuid TEXT NOT NULL,
-  gross_minor INTEGER NOT NULL CHECK (gross_minor >= 0),
-  net_minor INTEGER CHECK (net_minor IS NULL OR net_minor >= 0),
-  currency TEXT NOT NULL CHECK (length(currency) = 3),
-  occurred_at TEXT NOT NULL,
-  recorded_at TEXT NOT NULL,
-  PRIMARY KEY (source, event_id),
-  FOREIGN KEY (source, event_id) REFERENCES webhook_events(source, event_id) ON DELETE CASCADE,
-  FOREIGN KEY (experiment_id, arm) REFERENCES variants(experiment_id, arm) ON DELETE CASCADE,
-  FOREIGN KEY (experiment_id, arm, external_message_uuid)
-    REFERENCES send_intents(experiment_id, arm, external_message_uuid)
-) STRICT;
-
-CREATE INDEX purchases_experiment_arm
-  ON purchases (experiment_id, arm, occurred_at);
-
-CREATE INDEX purchases_purchaser
-  ON purchases (purchaser_uuid);
-
-CREATE TABLE metric_snapshots (
-  id TEXT PRIMARY KEY,
-  experiment_id TEXT NOT NULL,
-  arm TEXT NOT NULL CHECK (arm IN ('A', 'B')),
-  source TEXT NOT NULL CHECK (source IN (
-    'WEBHOOK_DERIVED', 'FANVUE_RECONCILIATION', 'DEMO', 'DRY_RUN'
-  )),
-  assigned_recipient_count INTEGER NOT NULL CHECK (assigned_recipient_count >= 0),
-  delivered_count INTEGER CHECK (delivered_count IS NULL OR delivered_count >= 0),
-  view_count INTEGER CHECK (view_count IS NULL OR view_count >= 0),
-  purchase_count INTEGER NOT NULL CHECK (purchase_count >= 0),
-  gross_minor INTEGER NOT NULL CHECK (gross_minor >= 0),
-  net_minor INTEGER CHECK (net_minor IS NULL OR net_minor >= 0),
-  currency TEXT NOT NULL CHECK (length(currency) = 3),
-  is_complete INTEGER NOT NULL CHECK (is_complete IN (0, 1)),
-  source_observed_at TEXT NOT NULL,
-  captured_at TEXT NOT NULL,
-  provenance_note TEXT,
-  FOREIGN KEY (experiment_id, arm) REFERENCES variants(experiment_id, arm) ON DELETE CASCADE
-) STRICT;
-
-CREATE INDEX metric_snapshots_experiment_captured
-  ON metric_snapshots (experiment_id, captured_at DESC);
 
 CREATE TABLE experiment_transitions (
   experiment_id TEXT NOT NULL REFERENCES experiments(id) ON DELETE CASCADE,

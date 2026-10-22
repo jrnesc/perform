@@ -14,14 +14,14 @@ const ledger = (...rows: unknown[]) => async () =>
   new Response(JSON.stringify({ data: rows, nextCursor: null }));
 
 const paymentEvent = (id: string, fan: string, arm: "A" | "B", experimentId: string): CommerceEventRecord => ({
-  kind: "PAYMENT", eventId: `event-${id}`, creatorUuid, paymentId: id, purchaserUuid: fan,
+  source: "FANVUE_WEBHOOK", kind: "PAYMENT", eventId: `event-${id}`, creatorUuid, paymentId: id, purchaserUuid: fan,
   messageUuid: arm === "A" ? "message-a" : "message-b", messageType: "BROADCAST",
   attributionStrategy: "ASSIGNMENT_WINDOW", messageMatched: true, experimentId, arm,
   grossMinor: 1200, netMinor: 960, currency: "USD",
   occurredAt: "2026-10-20T11:00:00.000Z", payloadHash: `hash-${id}`, receivedAt: "2026-10-20T11:00:01.000Z",
 });
 const reversalEvent = (id: string, paymentId: string): CommerceEventRecord => ({
-  kind: "REVERSAL", eventId: `event-${id}`, creatorUuid, paymentId, reversalId: id, reversalType: "REFUND",
+  source: "FANVUE_WEBHOOK", kind: "REVERSAL", eventId: `event-${id}`, creatorUuid, paymentId, reversalId: id, reversalType: "REFUND",
   amountMinor: 1200, currency: "USD", occurredAt: "2026-10-20T12:00:00.000Z",
   payloadHash: `hash-${id}`, receivedAt: "2026-10-20T12:00:01.000Z",
 });

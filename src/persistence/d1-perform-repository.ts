@@ -11,13 +11,11 @@ import type {
   AllocationCommit,
   DataProvenance,
   ExperimentRecord,
-  MetricSnapshot,
   NewExperiment,
   NewSendIntent,
   PerformRepository,
-  PurchaseReversalEvent,
-  PurchaseEvent,
   SendOutcome,
+  StoredSendIntent,
   TransitionCommand,
 } from "./contracts";
 
@@ -62,12 +60,6 @@ interface ExperimentRow {
   observation_ended_at: string | null;
   created_at: string;
   updated_at: string;
-}
-
-interface WebhookRow {
-  event_type: string;
-  payload_hash: string;
-  processed_at: string | null;
 }
 
 interface LearningRow {
@@ -237,6 +229,65 @@ export class D1PerformRepository implements PerformRepository {
       observationEndedAt: row.observation_ended_at ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+    }));
+  }
+
+  async listAssignments(experimentId: string): Promise<readonly Assignment[]> {
+    await this.requireExperiment(experimentId);
+    const rows = await this.db.prepare(
+      `SELECT fan_uuid, arm, stratum, algorithm_version
+       FROM assignments WHERE experiment_id = ? ORDER BY arm, fan_uuid`,
+    ).bind(experimentId).all<{
+      fan_uuid: string; arm: "A" | "B"; stratum: string; algorithm_version: string;
+    }>();
+    return (rows.results ?? []).map((row) => {
+      requireValue(row.algorithm_version === allocationAlgorithmVersion, "Assignment algorithm version mismatch");
+      return {
+        fanUuid: row.fan_uuid,
+        arm: row.arm,
+        stratum: row.stratum,
+        algorithmVersion: allocationAlgorithmVersion,
+      };
+    });
+  }
+
+  async listVariants(experimentId: string) {
+    await this.requireExperiment(experimentId);
+    const rows = await this.db.prepare(
+      `SELECT arm, copy_text, price_minor, currency, media_uuid
+       FROM variants WHERE experiment_id = ? ORDER BY arm`,
+    ).bind(experimentId).all<{
+      arm: "A" | "B"; copy_text: string; price_minor: number; currency: string; media_uuid: string;
+    }>();
+    return (rows.results ?? []).map((row) => ({
+      arm: row.arm, copy: row.copy_text, priceMinor: row.price_minor,
+      currency: row.currency, mediaUuid: row.media_uuid,
+    }));
+  }
+
+  async listSendIntents(experimentId: string): Promise<readonly StoredSendIntent[]> {
+    await this.requireExperiment(experimentId);
+    const rows = await this.db.prepare(
+      `SELECT id, experiment_id, arm, idempotency_key, payload_json, payload_hash,
+              status, external_message_uuid, scheduled_at, recipient_count,
+              cancelled_at, created_at
+       FROM send_intents
+       WHERE experiment_id = ? AND creator_uuid = ? ORDER BY arm`,
+    ).bind(experimentId, this.creatorUuid).all<{
+      id: string; experiment_id: string; arm: "A" | "B"; idempotency_key: string;
+      payload_json: string; payload_hash: string; status: StoredSendIntent["status"];
+      external_message_uuid: string | null; scheduled_at: string | null;
+      recipient_count: number | null; cancelled_at: string | null; created_at: string;
+    }>();
+    return (rows.results ?? []).map((row) => ({
+      id: row.id, experimentId: row.experiment_id, arm: row.arm,
+      idempotencyKey: row.idempotency_key, payloadJson: row.payload_json,
+      payloadHash: row.payload_hash, status: row.status,
+      externalMessageUuid: row.external_message_uuid ?? undefined,
+      scheduledAt: row.scheduled_at ?? undefined,
+      recipientCount: row.recipient_count ?? undefined,
+      cancelledAt: row.cancelled_at ?? undefined,
+      createdAt: row.created_at,
     }));
   }
 
@@ -465,7 +516,8 @@ export class D1PerformRepository implements PerformRepository {
         `UPDATE send_intents
          SET status = ?, external_message_uuid = ?, attempted_at = ?,
              confirmed_at = CASE WHEN ? = 'CONFIRMED' THEN ? ELSE NULL END,
-             last_error_code = ?, updated_at = ?
+             last_error_code = ?, scheduled_at = COALESCE(?, scheduled_at),
+             recipient_count = COALESCE(?, recipient_count), updated_at = ?
          WHERE id = ? AND creator_uuid = ?
            AND status IN ('PENDING', 'UNKNOWN')`,
       )
@@ -476,124 +528,14 @@ export class D1PerformRepository implements PerformRepository {
         outcome.status,
         outcome.occurredAt,
         nullable(outcome.errorCode),
+        nullable(outcome.scheduledAt),
+        nullable(outcome.recipientCount),
         outcome.occurredAt,
         outcome.intentId,
         this.creatorUuid,
       )
       .run();
     requireValue(changes(result) === 1, "Send outcome was stale or the intent was not found");
-  }
-
-  async recordPurchaseEvent(event: PurchaseEvent): Promise<"RECORDED" | "DUPLICATE"> {
-    await this.requireExperiment(event.experimentId);
-    const existing = await this.db
-      .prepare(
-        `SELECT event_type, payload_hash, processed_at
-         FROM webhook_events WHERE source = ? AND event_id = ?`,
-      )
-      .bind(event.source, event.eventId)
-      .first<WebhookRow>();
-    if (existing) {
-      requireValue(
-        existing.event_type === event.eventType && existing.payload_hash === event.payloadHash,
-        "A webhook event ID was reused with different content",
-      );
-      return "DUPLICATE";
-    }
-
-    const [insertEvent] = await this.db.batch([
-      this.db
-        .prepare(
-          `INSERT INTO webhook_events (
-             source, event_id, event_type, payload_hash, received_at, processed_at
-           ) VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          event.source,
-          event.eventId,
-          event.eventType,
-          event.payloadHash,
-          event.receivedAt,
-          event.receivedAt,
-        ),
-      this.db
-        .prepare(
-          `INSERT INTO purchases (
-             source, event_id, experiment_id, arm, purchaser_uuid,
-             external_message_uuid, gross_minor, net_minor, currency,
-             occurred_at, recorded_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          event.source,
-          event.eventId,
-          event.experimentId,
-          event.arm,
-          event.purchaserUuid,
-          event.externalMessageUuid,
-          event.grossMinor,
-          nullable(event.netMinor),
-          event.currency,
-          event.occurredAt,
-          event.receivedAt,
-        ),
-    ]);
-    return changes(insertEvent) === 1 ? "RECORDED" : "DUPLICATE";
-  }
-
-  async appendMetricSnapshot(snapshot: MetricSnapshot): Promise<void> {
-    await this.requireExperiment(snapshot.experimentId);
-    await this.db
-      .prepare(
-        `INSERT INTO metric_snapshots (
-           id, experiment_id, arm, source, assigned_recipient_count,
-           delivered_count, view_count, purchase_count, gross_minor, net_minor,
-           currency, is_complete, source_observed_at, captured_at, provenance_note
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        snapshot.id,
-        snapshot.experimentId,
-        snapshot.arm,
-        snapshot.source,
-        snapshot.assignedRecipientCount,
-        nullable(snapshot.deliveredCount),
-        nullable(snapshot.viewCount),
-        snapshot.purchaseCount,
-        snapshot.grossMinor,
-        nullable(snapshot.netMinor),
-        snapshot.currency,
-        snapshot.isComplete ? 1 : 0,
-        snapshot.sourceObservedAt,
-        snapshot.capturedAt,
-        nullable(snapshot.provenanceNote),
-      )
-      .run();
-  }
-
-  async recordPurchaseReversal(event: PurchaseReversalEvent): Promise<"RECORDED" | "DUPLICATE"> {
-    requireValue(event.amountMinor > 0, "A reversal amount must be positive");
-    const existing = await this.db.prepare(
-      `SELECT event_type, payload_hash, processed_at FROM webhook_events
-       WHERE source = ? AND event_id = ?`,
-    ).bind(event.source, event.eventId).first<WebhookRow>();
-    if (existing) {
-      requireValue(existing.event_type === event.eventType && existing.payload_hash === event.payloadHash, "Webhook event ID was reused with different content");
-      return "DUPLICATE";
-    }
-    const [insertEvent] = await this.db.batch([
-      this.db.prepare(
-        `INSERT INTO webhook_events (source, event_id, event_type, payload_hash, received_at, processed_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-      ).bind(event.source, event.eventId, event.eventType, event.payloadHash, event.receivedAt, event.receivedAt),
-      this.db.prepare(
-        `INSERT INTO purchase_reversals (
-           source, event_id, purchase_source, purchase_event_id, kind,
-           amount_minor, occurred_at, recorded_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(event.source, event.eventId, event.purchaseSource, event.purchaseEventId, event.kind, event.amountMinor, event.occurredAt, event.receivedAt),
-    ]);
-    return changes(insertEvent) === 1 ? "RECORDED" : "DUPLICATE";
   }
 
   async saveAnalysisResult(result: AnalysedResult): Promise<void> {
@@ -689,6 +631,9 @@ export class D1PerformRepository implements PerformRepository {
         .prepare(
           `UPDATE experiments
            SET state = ?, invalid_reason = ?, updated_at = ?, terminal_at = ?,
+               launched_at = CASE WHEN ? = 'RUNNING' THEN COALESCE(launched_at, ?) ELSE launched_at END,
+               observation_started_at = CASE WHEN ? = 'RUNNING' THEN COALESCE(observation_started_at, ?) ELSE observation_started_at END,
+               observation_ended_at = CASE WHEN ? = 'CLOSED' THEN COALESCE(observation_ended_at, ?) ELSE observation_ended_at END,
                fan_data_delete_after = ?, aggregate_delete_after = ?
            WHERE id = ? AND creator_uuid = ? AND data_provenance = ? AND state = ?`,
         )
@@ -697,6 +642,12 @@ export class D1PerformRepository implements PerformRepository {
           nullable(invalidReason),
           command.occurredAt,
           terminal ? command.occurredAt : null,
+          command.to,
+          command.occurredAt,
+          command.to,
+          command.occurredAt,
+          command.to,
+          command.occurredAt,
           terminal ? command.fanDataDeleteAfter ?? defaults?.fanDataDeleteAfter ?? null : null,
           terminal ? command.aggregateDeleteAfter ?? defaults?.aggregateDeleteAfter ?? null : null,
           command.experimentId,
@@ -741,19 +692,6 @@ export class D1PerformRepository implements PerformRepository {
   async deleteFanData(fanUuid: string): Promise<void> {
     requireValue(fanUuid.trim(), "A fan UUID is required");
     await this.db.batch([
-      this.db
-        .prepare(
-          `DELETE FROM webhook_events
-           WHERE EXISTS (
-             SELECT 1 FROM purchases p
-             JOIN experiments e ON e.id = p.experiment_id
-             WHERE p.source = webhook_events.source
-               AND p.event_id = webhook_events.event_id
-               AND p.purchaser_uuid = ?
-               AND e.creator_uuid = ? AND e.data_provenance = ?
-           )`,
-        )
-        .bind(fanUuid, this.creatorUuid, this.dataProvenance),
       this.db
         .prepare(
           `DELETE FROM commerce_events

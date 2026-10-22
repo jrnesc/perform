@@ -3,6 +3,7 @@ import type { ExperimentState, ExperimentVariable, VariantDefinition } from "../
 import type { SubscriberCohort } from "../integrations/fanvue/subscription-history";
 import type { DataProvenance, MetricSource } from "../persistence/contracts";
 import type { AudienceEvidenceRow } from "../persistence/live-evidence";
+import type { CommerceEventRecord } from "../persistence/live-evidence";
 
 export type ResultAssignment = { fanUuid: string; arm: Arm };
 
@@ -73,6 +74,8 @@ export type DemoResultFixture = {
   invalidReason?: string;
   assignments: readonly ResultAssignment[];
   purchases: readonly ResultPurchase[];
+  /** Seeded outcomes replay the same stored event shape and projection as live Results. */
+  commerceEvents?: readonly CommerceEventRecord[];
   /** Rows exactly as `audience_member_evidence` stores them, for seeded and live alike. */
   frozenAudience?: readonly AudienceEvidenceRow[];
   audienceEvidence?: readonly AudienceMemberEvidence[];

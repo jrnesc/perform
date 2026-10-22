@@ -6,6 +6,9 @@ export type AudienceProvenance = {
   kind: "DEMO_SEEDED";
   label: "Seeded demo data";
   fixtureVersion: string;
+} | {
+  kind: "FANVUE";
+  label: "Live Fanvue audience";
 };
 
 export type AudienceExclusion = {
@@ -18,7 +21,7 @@ export type AudienceSnapshot = {
   id: string;
   name: string;
   description: string;
-  sourceKind: "DEMO_FIXTURE";
+  sourceKind: "DEMO_FIXTURE" | "FANVUE_SMART_LIST";
   capturedAt: string;
   members: readonly AudienceMember[];
   sourceCount: number;
@@ -67,8 +70,8 @@ export type DryRunEffect = {
 
 export type DryRunPlan = {
   version: "perform-dry-run-v1";
-  mode: "DRY_RUN";
-  writeMode: "disabled";
+  mode: "DRY_RUN" | "LAUNCH_PLAN";
+  writeMode: "disabled" | "enabled";
   experimentId: string;
   snapshotHash: string;
   provenance: AssetProvenance;

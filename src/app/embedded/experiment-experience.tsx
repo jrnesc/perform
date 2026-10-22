@@ -3,9 +3,13 @@
 import {
   ChartColumnIncreasingIcon,
   CircleHelpIcon,
+  EyeIcon,
   FileCheckIcon,
   GalleryThumbnailsIcon,
   GitBranchIcon,
+  MessageSquareMoreIcon,
+  RocketIcon,
+  SquarePenIcon,
   UsersIcon,
 } from "lucide-animated";
 import { useReducedMotion } from "motion/react";
@@ -28,20 +32,31 @@ const stageIcons = {
   Review: FileCheckIcon,
 } satisfies Record<SetupStage, typeof UsersIcon>;
 
-export function StageIcon({ stage, decorative = false, animateOnAppear = false }: { stage: SetupStage; decorative?: boolean; animateOnAppear?: boolean }) {
+export function StageIcon({ stage, decorative = false, animateOnAppear = false, continuous = false }: { stage: SetupStage; decorative?: boolean; animateOnAppear?: boolean; continuous?: boolean }) {
   const Icon = stageIcons[stage];
   const reducedMotion = useReducedMotion();
   const iconRef = useRef<AnimatedIconHandle>(null);
 
   useEffect(() => {
-    if (!animateOnAppear || reducedMotion) return;
+    if (continuous || !animateOnAppear || reducedMotion) return;
     const frame = window.requestAnimationFrame(() => iconRef.current?.startAnimation());
     return () => window.cancelAnimationFrame(frame);
-  }, [animateOnAppear, reducedMotion, stage]);
+  }, [animateOnAppear, continuous, reducedMotion, stage]);
 
   return (
     <div className="stage-icon" aria-hidden={decorative || undefined} aria-label={decorative ? undefined : stage} title={stage} data-animate-on-appear={animateOnAppear}>
-      <Icon ref={iconRef} size={18} animateOnHover={!reducedMotion} />
+      {continuous
+        ? <LoopingIcon icon={Icon} size={18} intervalMs={3200 + setupStages.indexOf(stage) * 400} />
+        : <Icon ref={iconRef} size={18} animateOnHover={!reducedMotion} />}
+    </div>
+  );
+}
+
+/** Icons for the review sections that follow the five setup steps. */
+export function SectionIcon({ section }: { section: "preview" | "launch" }) {
+  return (
+    <div className="stage-icon" aria-hidden="true">
+      <LoopingIcon icon={(section === "preview" ? MessageSquareMoreIcon : RocketIcon) as typeof UsersIcon} size={18} intervalMs={section === "preview" ? 3000 : 3600} />
     </div>
   );
 }
@@ -126,6 +141,7 @@ export function ResultComparison({ result }: { result: AnalysedResult }) {
   const maximum = Math.max(...values, 1);
   const chartHeight = 150;
   const baseline = 210;
+  const chartLabel = `${metricLabels[metric]} for Arm A and Arm B. Aggregate-only grouped bar chart. Arm A: ${formatMetric(result, metric, values[0])}. Arm B: ${formatMetric(result, metric, values[1])}.`;
 
   return (
     <section className="comparison-panel" aria-labelledby="comparison-title">
@@ -134,9 +150,7 @@ export function ResultComparison({ result }: { result: AnalysedResult }) {
         {(Object.keys(metricLabels) as MetricKey[]).map((key) => <button type="button" role="radio" aria-checked={metric === key} className={metric === key ? "active" : ""} key={key} onClick={() => setMetric(key)}>{metricLabels[key]}</button>)}
       </div>
       <p className="chart-unit">Unit · {metricUnit(result, metric)}</p>
-      <svg className="comparison-chart" viewBox="0 0 640 250" role="img" aria-labelledby="comparison-chart-title comparison-chart-desc">
-        <title id="comparison-chart-title">{metricLabels[metric]} for Arm A and Arm B</title>
-        <desc id="comparison-chart-desc">Aggregate-only grouped bar chart. Arm A: {formatMetric(result, metric, values[0])}. Arm B: {formatMetric(result, metric, values[1])}.</desc>
+      <svg className="comparison-chart" viewBox="0 0 640 250" role="img" aria-label={chartLabel}>
         {[0, 0.25, 0.5, 0.75, 1].map((portion) => {
           const y = baseline - chartHeight * portion;
           return <g key={portion}><line x1="72" x2="610" y1={y} y2={y} className="chart-grid" /><text x="62" y={y + 4} textAnchor="end">{formatMetric(result, metric, maximum * portion)}</text></g>;
@@ -150,6 +164,32 @@ export function ResultComparison({ result }: { result: AnalysedResult }) {
       <div className="comparison-table-wrap"><table><caption>Exact aggregate values and assigned-recipient denominators</caption><thead><tr><th>Arm</th><th>{metricLabels[metric]}</th><th>Assigned recipients</th></tr></thead><tbody>{(["A", "B"] as const).map((arm) => <tr key={arm}><th>Arm {arm}</th><td>{formatMetric(result, metric, metricValue(result, arm, metric))} <span>{metricUnit(result, metric)}</span></td><td>{result.arms[arm].assignedRecipients}</td></tr>)}</tbody></table></div>
     </section>
   );
+}
+
+/** Restarts an icon's one-shot animation on a short interval so it keeps moving. */
+function LoopingIcon({ icon: Icon, size, intervalMs }: { icon: typeof UsersIcon; size: number; intervalMs: number }) {
+  const reducedMotion = useReducedMotion();
+  const iconRef = useRef<AnimatedIconHandle>(null);
+  useEffect(() => {
+    if (reducedMotion) return;
+    let frame = 0;
+    const play = () => {
+      iconRef.current?.stopAnimation();
+      frame = window.requestAnimationFrame(() => iconRef.current?.startAnimation());
+    };
+    play();
+    const timer = window.setInterval(play, intervalMs);
+    return () => { window.clearInterval(timer); window.cancelAnimationFrame(frame); };
+  }, [reducedMotion, intervalMs]);
+  return <Icon ref={iconRef} size={size} animateOnHover={false} aria-hidden="true" />;
+}
+
+export function WritingPenIcon({ size = 26 }: { size?: number }) {
+  return <LoopingIcon icon={SquarePenIcon as typeof UsersIcon} size={size} intervalMs={1600} />;
+}
+
+export function WatchfulEyeIcon({ size = 20 }: { size?: number }) {
+  return <LoopingIcon icon={EyeIcon as typeof UsersIcon} size={size} intervalMs={2400} />;
 }
 
 export function ScenarioIcon() {

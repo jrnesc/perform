@@ -51,9 +51,12 @@ function armEffects(review: ExperimentReview, arm: Arm): DryRunEffect[] {
 }
 
 /** Build data only. This module deliberately exposes no effect executor. */
-export function buildDryRunPlan(review: ExperimentReview): DryRunPlan {
+export function buildDryRunPlan(
+  review: ExperimentReview,
+  options: { liveLaunch?: boolean } = {},
+): DryRunPlan {
   if (review.overlapCount !== 0) throw new Error("A dry run requires zero cohort overlap");
-  if (review.provenance.kind === "FANVUE") {
+  if (review.provenance.kind === "FANVUE" && !options.liveLaunch) {
     throw new Error("Phase 3 dry runs accept the server-authorised demo audience only");
   }
   for (const variant of review.draft.variants) {
@@ -66,8 +69,8 @@ export function buildDryRunPlan(review: ExperimentReview): DryRunPlan {
   const memberBatches = effects.filter((effect) => effect.id.startsWith("add-members-")).length;
   return {
     version: "perform-dry-run-v1",
-    mode: "DRY_RUN",
-    writeMode: "disabled",
+    mode: options.liveLaunch ? "LAUNCH_PLAN" : "DRY_RUN",
+    writeMode: options.liveLaunch ? "enabled" : "disabled",
     experimentId: review.experimentId,
     snapshotHash: review.snapshotHash,
     provenance: review.provenance,

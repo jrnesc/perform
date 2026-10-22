@@ -38,7 +38,7 @@ describe("FanvueMediaGateway", () => {
 
     const result = await subject.gateway.listMedia({ page: 2, pageSize: 12 });
 
-    expect(subject.listMedia).toHaveBeenCalledWith({ page: 2, size: 12, status: ["ready"], variants: ["thumbnail"] });
+    expect(subject.listMedia).toHaveBeenCalledWith({ page: 2, size: 12, status: ["ready"], variants: ["thumbnail", "thumbnail_gallery", "main"] });
     expect(result).toMatchObject({ page: 2, pageSize: 12, hasMore: true, total: 8, provenance: { kind: "FANVUE" } });
     expect(result.items[0]).toMatchObject({ id: "fanvue-media-1", thumbnailUrl: "https://cdn.example/thumb", provenance: { kind: "FANVUE" } });
   });

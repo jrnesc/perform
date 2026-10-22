@@ -1,4 +1,5 @@
 import { assignmentWindowCaveat, type AttributionStrategyId } from "../live/attribution";
+import { projectResultPurchases } from "../live/commerce-projection";
 import {
   countsTowardArms,
   type CommerceEventRecord,
@@ -19,8 +20,6 @@ export type LiveAudienceBreakdown = {
   caveat: string | null;
 };
 
-type Payment = Extract<CommerceEventRecord, { kind: "PAYMENT" }>;
-
 /**
  * Maps frozen live evidence and stored commerce events onto the same per-member contract the
  * seeded results use, so Results shows the same five cohorts with REAL provenance. Only payments
@@ -36,10 +35,12 @@ export function buildLiveAudienceBreakdown(input: {
   if (rowByFan.size !== input.rows.length || input.rows.some((row) => row.experimentId !== input.experimentId)) {
     throw new Error("Live audience evidence must hold one row per fan in the selected experiment");
   }
-  const reversals = new Map<string, Extract<CommerceEventRecord, { kind: "REVERSAL" }>>();
-  for (const event of input.events) if (event.kind === "REVERSAL") reversals.set(event.paymentId, event);
-
-  const paymentsByFan = new Map<string, Payment[]>();
+  const projected = projectResultPurchases({
+    experimentId: input.experimentId,
+    events: input.events,
+    assignments: Object.fromEntries(input.rows.map((row) => [row.fanUuid, row.arm])),
+  });
+  const purchasesByFan = new Map<string, typeof projected>();
   let assignmentWindowOnly = 0;
   let unmatchedPlausible = 0;
   for (const event of input.events) {
@@ -48,21 +49,26 @@ export function buildLiveAudienceBreakdown(input: {
     const row = rowByFan.get(event.purchaserUuid);
     if (!row || row.arm !== event.arm || event.occurredAt < row.capturedAt) continue;
     if (!event.messageMatched) assignmentWindowOnly += 1;
-    paymentsByFan.set(event.purchaserUuid, [...(paymentsByFan.get(event.purchaserUuid) ?? []), event]);
+    // Per-member outcomes below come from the shared invoice projection.
+  }
+
+  for (const purchase of projected) {
+    const row = rowByFan.get(purchase.fanUuid);
+    if (!row || purchase.occurredAt < row.capturedAt) continue;
+    purchasesByFan.set(purchase.fanUuid, [...(purchasesByFan.get(purchase.fanUuid) ?? []), purchase]);
   }
 
   const evidence = input.rows.map((row): AudienceMemberEvidence => {
-    const payments = [...(paymentsByFan.get(row.fanUuid) ?? [])].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
-    const settled = payments.filter((payment) => !reversals.has(payment.paymentId));
-    const reversalTypes = payments.map((payment) => reversals.get(payment.paymentId)?.reversalType);
+    const payments = [...(purchasesByFan.get(row.fanUuid) ?? [])].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+    const settled = payments.filter((payment) => payment.refundedMinor + payment.disputedMinor < payment.grossMinor);
     return memberEvidenceFromRow(row, "REAL", {
       converted: settled.length > 0,
       grossPurchaseCount: payments.length,
       settledPurchaseCount: settled.length,
       grossRevenueMinor: payments.reduce((total, payment) => total + payment.grossMinor, 0),
-      settledRevenueMinor: settled.reduce((total, payment) => total + payment.grossMinor, 0),
-      fullyRefunded: reversalTypes.includes("REFUND"),
-      disputed: reversalTypes.includes("DISPUTE"),
+      settledRevenueMinor: settled.reduce((total, payment) => total + payment.grossMinor - payment.refundedMinor - payment.disputedMinor, 0),
+      fullyRefunded: payments.some((payment) => payment.refundedMinor === payment.grossMinor),
+      disputed: payments.some((payment) => payment.disputedMinor > 0),
       lastOutcomeAt: payments.at(-1)?.occurredAt,
     });
   });
