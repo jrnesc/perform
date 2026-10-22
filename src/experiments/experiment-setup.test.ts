@@ -64,10 +64,14 @@ describe("Phase 3 dry-run plan", () => {
       executedEffects: 0,
     });
     expect(plan.effects.filter(({ path }) => path === "/v1/chats/mass-messages")).toHaveLength(2);
-    expect(plan.effects.filter(({ id }) => id.startsWith("add-members-")).every((effect) => {
-      const body = effect.body as { userUuids: string[] };
-      return body.userUuids.length > 0 && body.userUuids.length <= 100;
-    })).toBe(true);
+    expect(
+      plan.effects
+        .filter(({ id }) => id.startsWith("add-members-"))
+        .every((effect) => {
+          const body = effect.body as { userUuids: string[] };
+          return body.userUuids.length > 0 && body.userUuids.length <= 100;
+        }),
+    ).toBe(true);
   });
 
   it("is deterministic and keeps every message field equal except the declared copy change", async () => {
@@ -78,7 +82,11 @@ describe("Phase 3 dry-run plan", () => {
     const messages = first.effects.filter(({ id }) => id.startsWith("send-message-"));
     const [a, b] = messages.map((effect) => effect.body as Record<string, unknown>);
     expect(a.text).not.toBe(b.text);
-    expect({ ...a, text: "same", includedLists: "arm-list" }).toEqual({ ...b, text: "same", includedLists: "arm-list" });
+    expect({ ...a, text: "same", includedLists: "arm-list" }).toEqual({
+      ...b,
+      text: "same",
+      includedLists: "arm-list",
+    });
     expect(first.writeMode).toBe("disabled");
   });
 

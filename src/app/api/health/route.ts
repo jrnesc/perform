@@ -32,8 +32,6 @@ export async function GET() {
   return NextResponse.json({
     status: "ok",
     mode: process.env.PERFORM_WRITE_MODE === "enabled" ? "sending-enabled" : "sending-disabled",
-    liveCapabilities: Object.fromEntries(
-      Object.entries(capabilities).map(([id, report]) => [id, report.state]),
-    ),
+    liveCapabilities: Object.fromEntries(Object.entries(capabilities).map(([id, report]) => [id, report.state])),
   });
 }

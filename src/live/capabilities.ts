@@ -15,12 +15,7 @@ export const liveCapabilityIds = [
 
 export type LiveCapabilityId = (typeof liveCapabilityIds)[number];
 
-export type CapabilityState =
-  | "fixture_backed"
-  | "configured"
-  | "connected"
-  | "verified"
-  | "active";
+export type CapabilityState = "fixture_backed" | "configured" | "connected" | "verified" | "active";
 
 export const requiredScopes: Readonly<Record<LiveCapabilityId, readonly string[]>> = {
   audience_discovery: ["read:chat", "read:fan"],
@@ -43,7 +38,12 @@ export type CapabilityReport = {
 export type CapabilityEnvironment = Readonly<Record<string, string | undefined>>;
 
 function words(value: string | undefined, separator: RegExp): Set<string> {
-  return new Set((value ?? "").split(separator).map((item) => item.trim()).filter(Boolean));
+  return new Set(
+    (value ?? "")
+      .split(separator)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  );
 }
 
 /**

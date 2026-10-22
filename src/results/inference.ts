@@ -54,6 +54,15 @@ export function estimateCopyResult(
   input: { assignedA: number; purchasesA: number; assignedB: number; purchasesB: number },
   seed = "perform-copy-beta-v1",
 ): UncertaintyEstimate {
+  for (const [purchases, assigned] of [
+    [input.purchasesA, input.assignedA],
+    [input.purchasesB, input.assignedB],
+  ]) {
+    // A Beta posterior needs successes within trials; anything else is an attribution bug upstream.
+    if (!Number.isInteger(purchases) || purchases < 0 || purchases > assigned) {
+      throw new Error("Converted fans must be a whole number between zero and the assigned recipients");
+    }
+  }
   const random = seededRandom(seed);
   const armA: number[] = [];
   const armB: number[] = [];

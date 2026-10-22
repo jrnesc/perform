@@ -74,9 +74,7 @@ export interface TransitionEvidence {
   invalidReason?: string;
 }
 
-export const allowedTransitions: Readonly<
-  Record<ExperimentState, readonly ExperimentState[]>
-> = {
+export const allowedTransitions: Readonly<Record<ExperimentState, readonly ExperimentState[]>> = {
   DRAFT: ["SNAPSHOTTING", "INVALID"],
   SNAPSHOTTING: ["ALLOCATED", "INVALID"],
   ALLOCATED: ["PROVISIONING", "INVALID"],
@@ -95,10 +93,7 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-export function validateVariants(
-  variable: ExperimentVariable,
-  variants: readonly VariantDefinition[],
-): void {
+export function validateVariants(variable: ExperimentVariable, variants: readonly VariantDefinition[]): void {
   assert(variants.length === 2, "Exactly two variants are required");
   const a = variants.find(({ arm }) => arm === "A");
   const b = variants.find(({ arm }) => arm === "B");
@@ -130,10 +125,7 @@ function validateSnapshot(snapshot: SnapshotEvidence | undefined): void {
   assert(snapshot, "A completed audience snapshot is required");
   assert(/^[a-f0-9]{64}$/.test(snapshot.hash), "Snapshot hash must be SHA-256");
   assert(snapshot.eligibleCount >= 2, "At least two eligible fans are required");
-  assert(
-    snapshot.assignmentCount === snapshot.eligibleCount,
-    "Every eligible fan must have exactly one assignment",
-  );
+  assert(snapshot.assignmentCount === snapshot.eligibleCount, "Every eligible fan must have exactly one assignment");
   assert(
     snapshot.armCounts.A + snapshot.armCounts.B === snapshot.assignmentCount,
     "Arm counts must equal the assignment count",
@@ -158,11 +150,7 @@ function validateTwoSendIntents(
   return [a, b];
 }
 
-function validateTransitionEvidence(
-  from: ExperimentState,
-  to: ExperimentState,
-  evidence: TransitionEvidence,
-): void {
+function validateTransitionEvidence(from: ExperimentState, to: ExperimentState, evidence: TransitionEvidence): void {
   if (to === "INVALID") {
     assert(evidence.invalidReason?.trim(), "Invalidation requires a reason");
     if (from === "SENDING") {
@@ -192,13 +180,14 @@ function validateTransitionEvidence(
     assert(evidence.launchConfirmed, "Arming requires deliberate launch confirmation");
   } else if (from === "ARMED" && to === "SENDING") {
     const intents = validateTwoSendIntents(evidence.sendIntents);
-    assert(intents.every(({ status }) => status === "PENDING"), "Both sends must be pending");
+    assert(
+      intents.every(({ status }) => status === "PENDING"),
+      "Both sends must be pending",
+    );
   } else if (from === "SENDING" && to === "RUNNING") {
     const intents = validateTwoSendIntents(evidence.sendIntents);
     assert(
-      intents.every(({ status, externalMessageUuid }) =>
-        status === "CONFIRMED" && Boolean(externalMessageUuid),
-      ),
+      intents.every(({ status, externalMessageUuid }) => status === "CONFIRMED" && Boolean(externalMessageUuid)),
       "Both sends must be confirmed with external message UUIDs",
     );
   } else if (from === "SENDING" && to === "PARTIAL_LAUNCH") {

@@ -3,9 +3,7 @@ import type { PerformRepository } from "../persistence/contracts";
 import type { ReconciliationRecord } from "../persistence/live-evidence";
 import type { LaunchRepository } from "./launch-repository";
 
-export type CloseResult =
-  | { status: "CLOSED"; deletedLists: number }
-  | { status: "OPEN"; reasons: readonly string[] };
+export type CloseResult = { status: "CLOSED"; deletedLists: number } | { status: "OPEN"; reasons: readonly string[] };
 
 /** Every reason the checks found, so the creator sees all blockers at once (ADR 0020). */
 export function closeBlockers(input: {
@@ -46,7 +44,8 @@ export async function closeExperimentIfReady(input: {
 }): Promise<CloseResult> {
   const experiment = await input.repository.getExperiment(input.experimentId);
   if (experiment?.state === "CLOSED") return { status: "CLOSED", deletedLists: 0 };
-  if (!experiment || experiment.state !== "RUNNING") return { status: "OPEN", reasons: ["The experiment is not running"] };
+  if (!experiment || experiment.state !== "RUNNING")
+    return { status: "OPEN", reasons: ["The experiment is not running"] };
   const confirmation = await input.launchRepository.getConfirmation();
   const reasons = closeBlockers({
     observationEndsAt: confirmation?.observationEndsAt ?? null,
@@ -69,8 +68,11 @@ export async function closeExperimentIfReady(input: {
     deletedLists += 1;
   }
   await input.repository.transitionExperiment({
-    commandId: `${experiment.id}:closed`, experimentId: experiment.id, to: "CLOSED",
-    occurredAt: input.now(), evidence: { observationEnded: true, metricsFinal: true },
+    commandId: `${experiment.id}:closed`,
+    experimentId: experiment.id,
+    to: "CLOSED",
+    occurredAt: input.now(),
+    evidence: { observationEnded: true, metricsFinal: true },
   });
   return { status: "CLOSED", deletedLists };
 }

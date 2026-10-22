@@ -20,7 +20,7 @@ export async function POST(request: Request) {
   if (!session?.isCreator || !session.userUuid.trim()) {
     return jsonError(401, "not_a_verified_creator", "Open Perform from Fanvue to reconnect.");
   }
-  const body = await request.json().catch(() => ({})) as { experimentId?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { experimentId?: unknown };
   if (typeof body.experimentId !== "string" || !body.experimentId) {
     return jsonError(400, "experiment_required", "An experiment ID is required.");
   }
@@ -50,18 +50,24 @@ export async function POST(request: Request) {
         evidenceRepository: new D1LiveEvidenceRepository(db, creatorUuid, "REAL"),
       };
     },
-    transport: () => createFanvueReadTransport({
-      accessToken: session.accessToken,
-      coordinationKey: session.userUuid,
-    }),
+    transport: () =>
+      createFanvueReadTransport({
+        accessToken: session.accessToken,
+        coordinationKey: session.userUuid,
+      }),
     now: () => new Date().toISOString(),
     commandId: crypto.randomUUID(),
   });
 
   if (result.status === "REFUSED") {
-    const status = result.reason === "NOT_A_VERIFIED_CREATOR" ? 401
-      : result.reason === "EXPERIMENT_NOT_FOUND" ? 404
-      : result.reason === "CAPABILITY_NOT_ACTIVE" ? 409 : 403;
+    const status =
+      result.reason === "NOT_A_VERIFIED_CREATOR"
+        ? 401
+        : result.reason === "EXPERIMENT_NOT_FOUND"
+          ? 404
+          : result.reason === "CAPABILITY_NOT_ACTIVE"
+            ? 409
+            : 403;
     return jsonError(status, result.reason.toLowerCase(), "Live audience capture is not available.", {
       capabilities: result.capabilities ?? null,
     });

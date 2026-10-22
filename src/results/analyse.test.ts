@@ -13,10 +13,7 @@ function swapObservedArms(fixture: DemoResultFixture): DemoResultFixture {
       ...purchase,
       id: `${purchase.id}:swapped`,
       arm: purchase.arm === "A" ? "B" : "A",
-      fanUuid: purchase.fanUuid.replace(
-        purchase.arm === "A" ? ":a:" : ":b:",
-        purchase.arm === "A" ? ":b:" : ":a:",
-      ),
+      fanUuid: purchase.fanUuid.replace(purchase.arm === "A" ? ":a:" : ":b:", purchase.arm === "A" ? ":b:" : ":a:"),
     })),
   };
 }
@@ -42,9 +39,9 @@ describe("Phase 4 interpretation gates", () => {
 
   it("uses assigned-recipient denominators and removes full reversals", () => {
     const result = byId("copy-complete");
-    expect(result.arms.B.assignedRecipients).toBe(12);
-    expect(result.arms.B.grossPurchases).toBe(7);
-    expect(result.arms.B.settledPurchases).toBe(6);
+    expect(result.arms.B.assignedRecipients).toBe(120);
+    expect(result.arms.B.grossPurchases).toBe(31);
+    expect(result.arms.B.settledPurchases).toBe(30);
     expect(result.status).toBe("LEARNING_READY");
     expect(result.observedDirection.outcome).toBe("B_LED");
     expect(result.observedDirection.statement).toContain("Arm B produced");
@@ -52,17 +49,21 @@ describe("Phase 4 interpretation gates", () => {
     expect(result.learning?.statement).not.toMatch(/fan-|individual|personal/i);
   });
 
-  it("reports the seeded price result as an observed B lead without promoting it to a learning", () => {
+  it("reports the seeded price result as no dependable difference despite a small observed B lead", () => {
     const result = byId("price-complete");
     expect(result.status).toBe("LEARNING_READY");
     expect(result.observedDirection).toMatchObject({
       outcome: "B_LED",
       metric: "SETTLED_REVENUE_PER_ASSIGNED_RECIPIENT",
-      armAValue: 400,
-      armBValue: 750,
-      differenceArmBMinusArmA: 350,
+      armAValue: 240,
+      armBValue: 255,
+      differenceArmBMinusArmA: 15,
     });
-    expect(result.observedDirection.statement).toContain("Arm B produced $3.50 more settled revenue per assigned recipient");
+    expect(result.observedDirection.statement).toContain(
+      "Arm B produced $0.15 more settled revenue per assigned recipient",
+    );
+    expect(result.estimate!.probabilityArmBBetter).toBeGreaterThan(0.3);
+    expect(result.estimate!.probabilityArmBBetter).toBeLessThan(0.7);
     expect(result.confidence.status).toBe("NOT_YET_DEPENDABLE");
     expect(result.confidence.statement).toContain("plausible outcomes in both directions");
     expect(result.confidence.nextStep).toMatch(/extend|repeat/i);
@@ -83,15 +84,20 @@ describe("Phase 4 interpretation gates", () => {
     const fixture = DEMO_RESULT_FIXTURES.find(({ id }) => id.endsWith("price-complete"))!;
     const result = analyseResult({
       ...fixture,
+      // Mirrored purchases no longer match the seeded audience evidence, so analyse the aggregates alone.
+      audienceEvidence: undefined,
+      frozenAudience: undefined,
       id: `${fixture.id}:tied`,
       purchases: [
         ...fixture.purchases.filter(({ arm }) => arm === "A"),
-        ...fixture.purchases.filter(({ arm }) => arm === "A").map((purchase) => ({
-          ...purchase,
-          id: `${purchase.id}:tie-b`,
-          arm: "B" as const,
-          fanUuid: purchase.fanUuid.replace(":a:", ":b:"),
-        })),
+        ...fixture.purchases
+          .filter(({ arm }) => arm === "A")
+          .map((purchase) => ({
+            ...purchase,
+            id: `${purchase.id}:tie-b`,
+            arm: "B" as const,
+            fanUuid: purchase.fanUuid.replace(":a:", ":b:"),
+          })),
       ],
     });
     expect(result.observedDirection.outcome).toBe("TIED");

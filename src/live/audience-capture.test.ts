@@ -4,7 +4,12 @@ import { D1LiveEvidenceRepository } from "../persistence/live-evidence";
 import { createMigratedDatabase } from "../test/sqlite-d1";
 import { captureLiveAudience, persistLiveAudienceSnapshot } from "./audience-capture";
 import {
-  assignmentCutoff, capturedAt, creatorUuid, fanvueTransport, seedExperiment, sixFans,
+  assignmentCutoff,
+  capturedAt,
+  creatorUuid,
+  fanvueTransport,
+  seedExperiment,
+  sixFans,
   sourceAudienceUuid,
 } from "./test-fixtures";
 
@@ -31,17 +36,24 @@ describe("live audience capture", () => {
     expect(byCohort.get("active_renewing")).toEqual([2, 2]);
     expect(byCohort.get("active_not_renewing")).toEqual([1, 1]);
     expect(capture.evidence.find((row) => row.fanUuid === "fan-1")).toMatchObject({
-      priorSettledPurchaseCount: 2, priorSettledSpendMinor: 2000, autoRenewalEnabled: true,
-      subscriberCohort: "active_renewing", validPeriodCount: 2, hasTrial: false,
-      resubscribedAfterLapse: false, earliestSubscriptionAt: "2026-01-01T00:00:00.000Z",
+      priorSettledPurchaseCount: 2,
+      priorSettledSpendMinor: 2000,
+      autoRenewalEnabled: true,
+      subscriberCohort: "active_renewing",
+      validPeriodCount: 2,
+      hasTrial: false,
+      resubscribedAfterLapse: false,
+      earliestSubscriptionAt: "2026-01-01T00:00:00.000Z",
     });
     expect(JSON.stringify(capture)).not.toMatch(/private-handle|Private Name/);
   });
 
   it("derives resubscription and trial cohorts from documented history fields", async () => {
     const fans = [
-      { uuid: "r1", kind: "renewing" as const }, { uuid: "r2", kind: "renewing" as const },
-      { uuid: "back", kind: "resubscriber" as const }, { uuid: "new", kind: "trialing" as const },
+      { uuid: "r1", kind: "renewing" as const },
+      { uuid: "r2", kind: "renewing" as const },
+      { uuid: "back", kind: "resubscriber" as const },
+      { uuid: "new", kind: "trialing" as const },
     ];
     const capture = await captureLiveAudience({ ...base, transport: fanvueTransport(fans) });
     if (capture.status !== "READY") throw new Error("expected a complete capture");
@@ -52,12 +64,32 @@ describe("live audience capture", () => {
   });
 
   it.each([
-    ["a custom list", { ...base, source: { kind: "CUSTOM", uuid: "custom-1" } as const }, fanvueTransport(sixFans), ["SOURCE_NOT_ELIGIBLE"]],
-    ["a smart list not documented as contactable", { ...base, source: { kind: "SMART", uuid: "followers" } as const }, fanvueTransport(sixFans), ["SOURCE_NOT_ELIGIBLE"]],
-    ["a missing subscription history", base, fanvueTransport(sixFans, { "/v1/subscribers/fan-3/history": () => new Response("{}", { status: 404 }) }), ["SUBSCRIPTION_HISTORY_FAILED"]],
-    ["a failed purchase lookup", base, fanvueTransport(sixFans, {
-      "/v1/insights/fans/batch": () => new Response(JSON.stringify({ "fan-1": { error: "internal" } })),
-    }), ["PURCHASE_ENRICHMENT_FAILED"]],
+    [
+      "a custom list",
+      { ...base, source: { kind: "CUSTOM", uuid: "custom-1" } as const },
+      fanvueTransport(sixFans),
+      ["SOURCE_NOT_ELIGIBLE"],
+    ],
+    [
+      "a smart list not documented as contactable",
+      { ...base, source: { kind: "SMART", uuid: "followers" } as const },
+      fanvueTransport(sixFans),
+      ["SOURCE_NOT_ELIGIBLE"],
+    ],
+    [
+      "a missing subscription history",
+      base,
+      fanvueTransport(sixFans, { "/v1/subscribers/fan-3/history": () => new Response("{}", { status: 404 }) }),
+      ["SUBSCRIPTION_HISTORY_FAILED"],
+    ],
+    [
+      "a failed purchase lookup",
+      base,
+      fanvueTransport(sixFans, {
+        "/v1/insights/fans/batch": () => new Response(JSON.stringify({ "fan-1": { error: "internal" } })),
+      }),
+      ["PURCHASE_ENRICHMENT_FAILED"],
+    ],
     ["an empty audience", base, fanvueTransport([]), ["AUDIENCE_EMPTY"]],
   ])("is incomplete for %s and allocates nothing", async (_name, input, transport, reasons) => {
     const result = await captureLiveAudience({ ...input, transport });
@@ -68,9 +100,9 @@ describe("live audience capture", () => {
 
   it("is incomplete when purchase and subscriber reads contradict each other", async () => {
     // Fan Insights says subscriber, but the profile history is empty (for example, history lag).
-    const fans = sixFans.map((fan) => fan.uuid === "fan-2" ? { ...fan, kind: "never" as const } : fan);
+    const fans = sixFans.map((fan) => (fan.uuid === "fan-2" ? { ...fan, kind: "never" as const } : fan));
     const transport = fanvueTransport(sixFans, {
-      "/v1/subscribers/fan-2/history": async () => (await fanvueTransport(fans)("/v1/subscribers/fan-2/history")),
+      "/v1/subscribers/fan-2/history": async () => await fanvueTransport(fans)("/v1/subscribers/fan-2/history"),
     });
     const result = await captureLiveAudience({ ...base, transport });
     expect(result).toMatchObject({ status: "INCOMPLETE", reasons: ["STATE_CONFLICT"], failedFanUuids: ["fan-2"] });
@@ -81,7 +113,9 @@ describe("live audience capture", () => {
       "/v1/insights/fans/batch": () => new Response("{}", { status: 429, headers: { "retry-after": "9" } }),
     });
     expect(await captureLiveAudience({ ...base, transport })).toEqual({
-      status: "INCOMPLETE", reasons: ["READ_ABORTED"], failedFanUuids: [],
+      status: "INCOMPLETE",
+      reasons: ["READ_ABORTED"],
+      failedFanUuids: [],
       abort: { code: "RATE_LIMITED", retryAfterSeconds: 9 },
     });
   });
@@ -101,16 +135,24 @@ describe("live audience persistence", () => {
   it("stores assignments and immutable evidence, then finalises allocation", async () => {
     const { sqlite, repository, evidenceRepository } = setup();
     await persistLiveAudienceSnapshot({
-      repository, evidenceRepository, experimentId: "experiment-live", source,
-      capture: await ready(), commandId: "command-1",
+      repository,
+      evidenceRepository,
+      experimentId: "experiment-live",
+      source,
+      capture: await ready(),
+      commandId: "command-1",
     });
     expect(await repository.getExperiment("experiment-live")).toMatchObject({
-      state: "ALLOCATED", snapshotCount: 6,
+      state: "ALLOCATED",
+      snapshotCount: 6,
     });
     expect(await evidenceRepository.countAudienceEvidence("experiment-live")).toBe(6);
-    expect(() => sqlite.prepare("UPDATE audience_member_evidence SET subscriber_cohort = 'lapsed'").run())
-      .toThrow(/immutable/);
-    const columns = sqlite.prepare("PRAGMA table_info(audience_member_evidence)").all()
+    expect(() => sqlite.prepare("UPDATE audience_member_evidence SET subscriber_cohort = 'lapsed'").run()).toThrow(
+      /immutable/,
+    );
+    const columns = sqlite
+      .prepare("PRAGMA table_info(audience_member_evidence)")
+      .all()
       .map((column) => (column as { name: string }).name);
     expect(columns).not.toEqual(expect.arrayContaining(["handle", "display_name", "avatar_url"]));
   });
@@ -118,10 +160,16 @@ describe("live audience persistence", () => {
   it("does not finalise when evidence is missing for any assignment", async () => {
     const { repository, evidenceRepository } = setup();
     const capture = await ready();
-    await expect(persistLiveAudienceSnapshot({
-      repository, evidenceRepository, experimentId: "experiment-live", source,
-      capture: { ...capture, evidence: capture.evidence.slice(1) }, commandId: "command-1",
-    })).rejects.toThrow(/incomplete/);
+    await expect(
+      persistLiveAudienceSnapshot({
+        repository,
+        evidenceRepository,
+        experimentId: "experiment-live",
+        source,
+        capture: { ...capture, evidence: capture.evidence.slice(1) },
+        commandId: "command-1",
+      }),
+    ).rejects.toThrow(/incomplete/);
     expect(await repository.getExperiment("experiment-live")).toMatchObject({ state: "SNAPSHOTTING" });
     expect(await evidenceRepository.countAudienceEvidence("experiment-live")).toBe(0);
   });
@@ -129,29 +177,56 @@ describe("live audience persistence", () => {
   it("refuses demo experiments and a source other than the declared audience", async () => {
     const demo = setup({ provenance: "DEMO" });
     const demoRepository = new D1PerformRepository(
-      (demo.repository as unknown as { db: never }).db, creatorUuid, "DEMO",
+      (demo.repository as unknown as { db: never }).db,
+      creatorUuid,
+      "DEMO",
     );
-    await expect(persistLiveAudienceSnapshot({
-      repository: demoRepository, evidenceRepository: demo.evidenceRepository, experimentId: "experiment-live",
-      source, capture: await ready(), commandId: "c",
-    })).rejects.toThrow(/REAL/);
+    await expect(
+      persistLiveAudienceSnapshot({
+        repository: demoRepository,
+        evidenceRepository: demo.evidenceRepository,
+        experimentId: "experiment-live",
+        source,
+        capture: await ready(),
+        commandId: "c",
+      }),
+    ).rejects.toThrow(/REAL/);
 
     const real = setup({ source: "another-audience" });
-    await expect(persistLiveAudienceSnapshot({
-      repository: real.repository, evidenceRepository: real.evidenceRepository, experimentId: "experiment-live",
-      source, capture: await ready(), commandId: "c",
-    })).rejects.toThrow(/declared source/);
+    await expect(
+      persistLiveAudienceSnapshot({
+        repository: real.repository,
+        evidenceRepository: real.evidenceRepository,
+        experimentId: "experiment-live",
+        source,
+        capture: await ready(),
+        commandId: "c",
+      }),
+    ).rejects.toThrow(/declared source/);
   });
 
   it("is idempotent when the same capture is persisted again", async () => {
     const { repository, evidenceRepository } = setup();
     const capture = await ready();
-    const input = { repository, evidenceRepository, experimentId: "experiment-live", source, capture, commandId: "command-1" };
+    const input = {
+      repository,
+      evidenceRepository,
+      experimentId: "experiment-live",
+      source,
+      capture,
+      commandId: "command-1",
+    };
     await persistLiveAudienceSnapshot(input);
-    await expect(repository.finalizeAllocation({
-      commandId: "command-1", experimentId: "experiment-live", snapshotHash: capture.snapshotHash,
-      snapshotCount: 6, armCounts: capture.armCounts, algorithmVersion: capture.assignments[0].algorithmVersion,
-      snapshotAt: capturedAt,
-    })).resolves.toBeUndefined();
+    await expect(
+      repository.finalizeAllocation({
+        commandId: "command-1",
+        experimentId: "experiment-live",
+        snapshotHash: capture.snapshotHash,
+        snapshotCount: 6,
+        armCounts: capture.armCounts,
+        algorithmVersion: capture.assignments[0].algorithmVersion,
+        snapshotAt: capturedAt,
+      }),
+    ).resolves.toBeUndefined();
   });
 });

@@ -30,7 +30,9 @@ describe("Fanvue read transport", () => {
     let active = 0;
     let maximum = 0;
     let releaseAll!: () => void;
-    const gate = new Promise<void>((resolve) => { releaseAll = resolve; });
+    const gate = new Promise<void>((resolve) => {
+      releaseAll = resolve;
+    });
     const transport = createFanvueReadTransport({
       accessToken: "token",
       coordinationKey: "concurrency-test",
@@ -57,7 +59,10 @@ describe("Fanvue read transport", () => {
       accessToken: "token",
       coordinationKey: "budget-test",
       now: () => clock,
-      sleep: async (milliseconds) => { waits.push(milliseconds); clock += milliseconds; },
+      sleep: async (milliseconds) => {
+        waits.push(milliseconds);
+        clock += milliseconds;
+      },
       fetch: async () => new Response("{}"),
     });
     for (let index = 0; index <= fanvueReadBudgetPerMinute; index += 1) {

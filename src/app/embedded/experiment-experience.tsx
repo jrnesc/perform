@@ -33,7 +33,17 @@ const stageIcons = {
   Review: FileCheckIcon,
 } satisfies Record<SetupStage, typeof UsersIcon>;
 
-export function StageIcon({ stage, decorative = false, animateOnAppear = false, continuous = false }: { stage: SetupStage; decorative?: boolean; animateOnAppear?: boolean; continuous?: boolean }) {
+export function StageIcon({
+  stage,
+  decorative = false,
+  animateOnAppear = false,
+  continuous = false,
+}: {
+  stage: SetupStage;
+  decorative?: boolean;
+  animateOnAppear?: boolean;
+  continuous?: boolean;
+}) {
   const Icon = stageIcons[stage];
   const reducedMotion = useReducedMotion();
   const iconRef = useRef<AnimatedIconHandle>(null);
@@ -45,10 +55,18 @@ export function StageIcon({ stage, decorative = false, animateOnAppear = false, 
   }, [animateOnAppear, continuous, reducedMotion, stage]);
 
   return (
-    <div className={styles.stageIcon} aria-hidden={decorative || undefined} aria-label={decorative ? undefined : stage} title={stage} data-animate-on-appear={animateOnAppear}>
-      {continuous
-        ? <LoopingIcon icon={Icon} size={18} intervalMs={3200 + setupStages.indexOf(stage) * 400} />
-        : <Icon ref={iconRef} size={18} animateOnHover={!reducedMotion} />}
+    <div
+      className={styles.stageIcon}
+      aria-hidden={decorative || undefined}
+      aria-label={decorative ? undefined : stage}
+      title={stage}
+      data-animate-on-appear={animateOnAppear}
+    >
+      {continuous ? (
+        <LoopingIcon icon={Icon} size={18} intervalMs={3200 + setupStages.indexOf(stage) * 400} />
+      ) : (
+        <Icon ref={iconRef} size={18} animateOnHover={!reducedMotion} />
+      )}
     </div>
   );
 }
@@ -57,7 +75,11 @@ export function StageIcon({ stage, decorative = false, animateOnAppear = false, 
 export function SectionIcon({ section }: { section: "preview" | "launch" }) {
   return (
     <div className={styles.stageIcon} aria-hidden="true">
-      <LoopingIcon icon={(section === "preview" ? MessageSquareMoreIcon : RocketIcon) as typeof UsersIcon} size={18} intervalMs={section === "preview" ? 3000 : 3600} />
+      <LoopingIcon
+        icon={(section === "preview" ? MessageSquareMoreIcon : RocketIcon) as typeof UsersIcon}
+        size={18}
+        intervalMs={section === "preview" ? 3000 : 3600}
+      />
     </div>
   );
 }
@@ -87,12 +109,24 @@ export function ProgressStrip({ current }: { current: number }) {
 
   return (
     <div className={styles.progressSlot}>
-      <nav className={`${styles.progressStrip} ${compact ? styles.compact : ""}`} aria-label="Experiment setup progress" data-compact={compact}>
+      <nav
+        className={`${styles.progressStrip} ${compact ? styles.compact : ""}`}
+        aria-label="Experiment setup progress"
+        data-compact={compact}
+      >
         <ol>
           {setupStages.map((label, index) => {
             const state = index === current ? "current" : index < current ? "completed" : "unavailable";
             return (
-              <li key={label} className={state === "current" ? "active" : state === "completed" ? styles.complete : styles.unavailable} aria-label={`${label}, ${state}`} aria-current={state === "current" ? "step" : undefined} title={`${label} — ${state}`}>
+              <li
+                key={label}
+                className={
+                  state === "current" ? "active" : state === "completed" ? styles.complete : styles.unavailable
+                }
+                aria-label={`${label}, ${state}`}
+                aria-current={state === "current" ? "step" : undefined}
+                title={`${label} — ${state}`}
+              >
                 <StageIcon stage={label} decorative animateOnAppear={state === "current"} />
                 <span className={styles.progressLabel}>{label}</span>
                 <i aria-hidden="true" />
@@ -146,23 +180,97 @@ export function ResultComparison({ result }: { result: AnalysedResult }) {
 
   return (
     <section className={styles.comparisonPanel} aria-labelledby="comparison-title">
-      <header><div><p className="eyebrow">Aggregate comparison</p><h3 id="comparison-title">Arm A and Arm B together</h3><p>No temporal buckets exist in this evidence, so these bars compare honest experiment totals.</p></div><div className={styles.chartLegend} aria-label="Chart legend"><span><i className={styles.armA} />Arm A</span><span><i className={styles.armB} />Arm B</span></div></header>
+      <header>
+        <div>
+          <p className="eyebrow">Aggregate comparison</p>
+          <h3 id="comparison-title">Arm A and Arm B together</h3>
+          <p>No temporal buckets exist in this evidence, so these bars compare honest experiment totals.</p>
+        </div>
+        <div className={styles.chartLegend} aria-label="Chart legend">
+          <span>
+            <i className={styles.armA} />
+            Arm A
+          </span>
+          <span>
+            <i className={styles.armB} />
+            Arm B
+          </span>
+        </div>
+      </header>
       <div className={styles.metricSwitcher} role="radiogroup" aria-label="Comparison metric">
-        {(Object.keys(metricLabels) as MetricKey[]).map((key) => <button type="button" role="radio" aria-checked={metric === key} className={metric === key ? "active" : ""} key={key} onClick={() => setMetric(key)}>{metricLabels[key]}</button>)}
+        {(Object.keys(metricLabels) as MetricKey[]).map((key) => (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={metric === key}
+            className={metric === key ? "active" : ""}
+            key={key}
+            onClick={() => setMetric(key)}
+          >
+            {metricLabels[key]}
+          </button>
+        ))}
       </div>
       <p className={styles.chartUnit}>Unit · {metricUnit(result, metric)}</p>
       <svg className={styles.comparisonChart} viewBox="0 0 640 250" role="img" aria-label={chartLabel}>
         {[0, 0.25, 0.5, 0.75, 1].map((portion) => {
           const y = baseline - chartHeight * portion;
-          return <g key={portion}><line x1="72" x2="610" y1={y} y2={y} className={styles.chartGrid} /><text x="62" y={y + 4} textAnchor="end">{formatMetric(result, metric, maximum * portion)}</text></g>;
+          return (
+            <g key={portion}>
+              <line x1="72" x2="610" y1={y} y2={y} className={styles.chartGrid} />
+              <text x="62" y={y + 4} textAnchor="end">
+                {formatMetric(result, metric, maximum * portion)}
+              </text>
+            </g>
+          );
         })}
         {values.map((value, index) => {
           const height = value === 0 ? 2 : (value / maximum) * chartHeight;
           const x = index === 0 ? 205 : 385;
-          return <g key={index}><rect x={x} y={baseline - height} width="70" height={height} rx="5" className={index === 0 ? styles.barA : styles.barB} /><text x={x + 35} y={baseline - height - 10} textAnchor="middle" className={styles.barValue}>{formatMetric(result, metric, value)}</text><text x={x + 35} y="235" textAnchor="middle" className={styles.barLabel}>Arm {index === 0 ? "A" : "B"}</text></g>;
+          return (
+            <g key={index}>
+              <rect
+                x={x}
+                y={baseline - height}
+                width="70"
+                height={height}
+                rx="5"
+                className={index === 0 ? styles.barA : styles.barB}
+              />
+              <text x={x + 35} y={baseline - height - 10} textAnchor="middle" className={styles.barValue}>
+                {formatMetric(result, metric, value)}
+              </text>
+              <text x={x + 35} y="235" textAnchor="middle" className={styles.barLabel}>
+                Arm {index === 0 ? "A" : "B"}
+              </text>
+            </g>
+          );
         })}
       </svg>
-      <div className={styles.comparisonTableWrap}><table><caption>Exact aggregate values and assigned-recipient denominators</caption><thead><tr><th>Arm</th><th>{metricLabels[metric]}</th><th>Assigned recipients</th></tr></thead><tbody>{(["A", "B"] as const).map((arm) => <tr key={arm}><th>Arm {arm}</th><td>{formatMetric(result, metric, metricValue(result, arm, metric))} <span>{metricUnit(result, metric)}</span></td><td>{result.arms[arm].assignedRecipients}</td></tr>)}</tbody></table></div>
+      <div className={styles.comparisonTableWrap}>
+        <table>
+          <caption>Exact aggregate values and assigned-recipient denominators</caption>
+          <thead>
+            <tr>
+              <th>Arm</th>
+              <th>{metricLabels[metric]}</th>
+              <th>Assigned recipients</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(["A", "B"] as const).map((arm) => (
+              <tr key={arm}>
+                <th>Arm {arm}</th>
+                <td>
+                  {formatMetric(result, metric, metricValue(result, arm, metric))}{" "}
+                  <span>{metricUnit(result, metric)}</span>
+                </td>
+                <td>{result.arms[arm].assignedRecipients}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -170,7 +278,8 @@ export function ResultComparison({ result }: { result: AnalysedResult }) {
 /** Restarts an icon's one-shot animation on a short interval so it keeps moving. */
 /** Primary outcome as a creator reads it: dollars per recipient for price tests, a purchase rate for copy tests. */
 function formatPrimary(result: AnalysedResult, value: number): string {
-  if (result.fixture.variable === "PRICE") return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
+  if (result.fixture.variable === "PRICE")
+    return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);
   return `${Math.round(value * 100)}%`;
 }
 
@@ -196,24 +305,44 @@ function niceDomain(low: number, high: number): { ticks: number[]; min: number; 
 export function ResultHeadline({ result }: { result: AnalysedResult }) {
   const { observedDirection: direction, estimate, fixture } = result;
   const leader = direction.outcome === "A_LED" ? "A" : "B";
-  const leaderChance = estimate && (leader === "B" ? estimate.probabilityArmBBetter : 1 - estimate.probabilityArmBBetter);
+  const leaderChance =
+    estimate && (leader === "B" ? estimate.probabilityArmBBetter : 1 - estimate.probabilityArmBBetter);
   const metric = fixture.variable === "PRICE" ? "settled revenue per recipient" : "purchase rate";
-  const status = result.status === "LEARNING_READY" ? "evidence gate passed" : result.status.replaceAll("_", " ").toLowerCase();
-  return <div className={`${styles.resultBanner} ${styles.resultHeadline} ${result.confidence.supportsLearning ? styles.ready : styles.blocked}`}>
-    <p className="eyebrow">Observed result · {status}</p>
-    <div className={styles.headlineFigures}>
-      <div className={styles.headlineFigure}>
-        <strong>{direction.outcome === "TIED" ? "No difference" : formatGap(result, Math.abs(direction.differenceArmBMinusArmA))}</strong>
-        <span>{direction.outcome === "TIED" ? `Both arms at ${formatPrimary(result, direction.armAValue)} ${metric}` : `Arm ${leader} ahead on ${metric} · A ${formatPrimary(result, direction.armAValue)} → B ${formatPrimary(result, direction.armBValue)}`}</span>
+  const status =
+    result.status === "LEARNING_READY" ? "evidence gate passed" : result.status.replaceAll("_", " ").toLowerCase();
+  return (
+    <div
+      className={`${styles.resultBanner} ${styles.resultHeadline} ${result.confidence.supportsLearning ? styles.ready : styles.blocked}`}
+    >
+      <p className="eyebrow">Observed result · {status}</p>
+      <div className={styles.headlineFigures}>
+        <div className={styles.headlineFigure}>
+          <strong>
+            {direction.outcome === "TIED"
+              ? "No difference"
+              : formatGap(result, Math.abs(direction.differenceArmBMinusArmA))}
+          </strong>
+          <span>
+            {direction.outcome === "TIED"
+              ? `Both arms at ${formatPrimary(result, direction.armAValue)} ${metric}`
+              : `Arm ${leader} ahead on ${metric} · A ${formatPrimary(result, direction.armAValue)} → B ${formatPrimary(result, direction.armBValue)}`}
+          </span>
+        </div>
+        {leaderChance !== undefined && direction.outcome !== "TIED" && (
+          <div className={`${styles.headlineFigure} ${styles.headlineChance}`}>
+            <strong>{Math.round(leaderChance * 100)}%</strong>
+            <span>chance Arm {leader} is genuinely better</span>
+          </div>
+        )}
       </div>
-      {leaderChance !== undefined && direction.outcome !== "TIED" && <div className={`${styles.headlineFigure} ${styles.headlineChance}`}>
-        <strong>{Math.round(leaderChance * 100)}%</strong>
-        <span>chance Arm {leader} is genuinely better</span>
-      </div>}
+      <h3>{direction.statement}</h3>
+      {result.learning && (
+        <p className={styles.headlineLearning}>
+          Saved as a learning for {result.learning.audienceScope.replace(/^Fictional /, "").toLowerCase()}.
+        </p>
+      )}
     </div>
-    <h3>{direction.statement}</h3>
-    {result.learning && <p className={styles.headlineLearning}>Saved as a learning for {result.learning.audienceScope.replace(/^Fictional /, "").toLowerCase()}.</p>}
-  </div>;
+  );
 }
 
 /**
@@ -225,7 +354,17 @@ export function UncertaintyChart({ result }: { result: AnalysedResult }) {
   const rows = [
     { key: "A", label: "Arm A", value: direction.armAValue, range: estimate?.armAInterval, mark: "arm-a" },
     { key: "B", label: "Arm B", value: direction.armBValue, range: estimate?.armBInterval, mark: "arm-b" },
-    ...(estimate ? [{ key: "gap", label: "B − A", value: direction.differenceArmBMinusArmA, range: estimate.differenceInterval, mark: "gap" }] : []),
+    ...(estimate
+      ? [
+          {
+            key: "gap",
+            label: "B − A",
+            value: direction.differenceArmBMinusArmA,
+            range: estimate.differenceInterval,
+            mark: "gap",
+          },
+        ]
+      : []),
   ];
   const extremes = rows.flatMap((row) => [row.value, ...(row.range ?? [])]);
   const { ticks, min, max } = niceDomain(Math.min(0, ...extremes), Math.max(...extremes));
@@ -233,32 +372,85 @@ export function UncertaintyChart({ result }: { result: AnalysedResult }) {
   const percent = (value: number) => Math.round(((value - min) / (max - min || 1)) * 10000) / 100;
   const position = (value: number) => `${percent(value)}%`;
   const crossesZero = estimate && estimate.differenceInterval[0] < 0 && estimate.differenceInterval[1] > 0;
-  return <section className={styles.uncertaintyPanel} aria-labelledby="uncertainty-title">
-    <header>
-      <h2 id="uncertainty-title" className="section-title">How sure is this?</h2>
-      <p className={styles.uncertaintyVerdict}><strong>{confidence.label}.</strong> {confidence.statement}</p>
-      {confidence.nextStep && <p className={styles.uncertaintyNext}><strong>Next step:</strong> {confidence.nextStep}</p>}
-    </header>
-    <div className={styles.rangeChart}>
-      {rows.map((row) => <div className={`${styles.rangeRow} ${row.key === "gap" ? styles.rangeGap : ""}`} key={row.key}>
-        <span className={styles.rangeLabel}>{row.mark !== "gap" && <i data-mark={row.mark} aria-hidden="true" />}{row.label}</span>
-        <div className={styles.rangeTrack} aria-hidden="true">
-          <span className={styles.rangeZero} style={{ left: position(0) }} />
-          {row.range && <span className={styles.rangeInterval} data-mark={row.mark} style={{ left: position(row.range[0]), width: `${Math.round((percent(row.range[1]) - percent(row.range[0])) * 100) / 100}%` }} />}
-          <span className={styles.rangeDot} data-mark={row.mark} style={{ left: position(row.value) }} />
+  return (
+    <section className={styles.uncertaintyPanel} aria-labelledby="uncertainty-title">
+      <header>
+        <h2 id="uncertainty-title" className="section-title">
+          How sure is this?
+        </h2>
+        <p className={styles.uncertaintyVerdict}>
+          <strong>{confidence.label}.</strong> {confidence.statement}
+        </p>
+        {confidence.nextStep && (
+          <p className={styles.uncertaintyNext}>
+            <strong>Next step:</strong> {confidence.nextStep}
+          </p>
+        )}
+      </header>
+      <div className={styles.rangeChart}>
+        {rows.map((row) => (
+          <div className={`${styles.rangeRow} ${row.key === "gap" ? styles.rangeGap : ""}`} key={row.key}>
+            <span className={styles.rangeLabel}>
+              {row.mark !== "gap" && <i data-mark={row.mark} aria-hidden="true" />}
+              {row.label}
+            </span>
+            <div className={styles.rangeTrack} aria-hidden="true">
+              <span className={styles.rangeZero} style={{ left: position(0) }} />
+              {row.range && (
+                <span
+                  className={styles.rangeInterval}
+                  data-mark={row.mark}
+                  style={{
+                    left: position(row.range[0]),
+                    width: `${Math.round((percent(row.range[1]) - percent(row.range[0])) * 100) / 100}%`,
+                  }}
+                />
+              )}
+              <span className={styles.rangeDot} data-mark={row.mark} style={{ left: position(row.value) }} />
+            </div>
+            <span className={styles.rangeValue}>
+              <strong>
+                {row.key === "gap"
+                  ? `${row.value >= 0 ? "+" : "−"}${formatGap(result, Math.abs(row.value))}`
+                  : formatPrimary(result, row.value)}
+              </strong>
+              {row.range && (
+                <small>
+                  {row.key === "gap"
+                    ? `${formatGap(result, row.range[0])} to ${formatGap(result, row.range[1])}`
+                    : `${formatPrimary(result, row.range[0])}–${formatPrimary(result, row.range[1])}`}
+                </small>
+              )}
+            </span>
+          </div>
+        ))}
+        <div className={styles.rangeAxis} aria-hidden="true">
+          <span>{result.fixture.variable === "PRICE" ? "" : "% / pts"}</span>
+          <div>
+            {ticks.map((tick) => (
+              <span key={tick} style={{ left: position(tick) }}>
+                {result.fixture.variable === "PRICE" ? formatPrimary(result, tick) : `${Math.round(tick * 100)}`}
+              </span>
+            ))}
+          </div>
+          <span />
         </div>
-        <span className={styles.rangeValue}><strong>{row.key === "gap" ? `${row.value >= 0 ? "+" : "−"}${formatGap(result, Math.abs(row.value))}` : formatPrimary(result, row.value)}</strong>{row.range && <small>{row.key === "gap" ? `${formatGap(result, row.range[0])} to ${formatGap(result, row.range[1])}` : `${formatPrimary(result, row.range[0])}–${formatPrimary(result, row.range[1])}`}</small>}</span>
-      </div>)}
-      <div className={styles.rangeAxis} aria-hidden="true">
-        <span>{result.fixture.variable === "PRICE" ? "" : "% / pts"}</span>
-        <div>{ticks.map((tick) => <span key={tick} style={{ left: position(tick) }}>{result.fixture.variable === "PRICE" ? formatPrimary(result, tick) : `${Math.round(tick * 100)}`}</span>)}</div>
-        <span />
       </div>
-    </div>
-    <p className={styles.rangeCaption}>{estimate
-      ? <>Dots are what happened in this test; bars are the range the true value falls in 90% of the time, from {estimate.draws.toLocaleString("en-US")} simulated re-runs. {crossesZero ? "The B − A range crosses zero, so either arm could still be better." : `The B − A range sits entirely on one side of zero.`}</>
-      : <>Dots are what happened in this test. Likely ranges appear once the result passes the evidence gate.</>}</p>
-  </section>;
+      <p className={styles.rangeCaption}>
+        {estimate ? (
+          <>
+            Dots are what happened in this test; bars are the range the true value falls in 90% of the time, from{" "}
+            {estimate.draws.toLocaleString("en-US")} simulated re-runs.{" "}
+            {crossesZero
+              ? "The B − A range crosses zero, so either arm could still be better."
+              : `The B − A range sits entirely on one side of zero.`}
+          </>
+        ) : (
+          <>Dots are what happened in this test. Likely ranges appear once the result passes the evidence gate.</>
+        )}
+      </p>
+    </section>
+  );
 }
 
 function LoopingIcon({ icon: Icon, size, intervalMs }: { icon: typeof UsersIcon; size: number; intervalMs: number }) {
@@ -273,7 +465,10 @@ function LoopingIcon({ icon: Icon, size, intervalMs }: { icon: typeof UsersIcon;
     };
     play();
     const timer = window.setInterval(play, intervalMs);
-    return () => { window.clearInterval(timer); window.cancelAnimationFrame(frame); };
+    return () => {
+      window.clearInterval(timer);
+      window.cancelAnimationFrame(frame);
+    };
   }, [reducedMotion, intervalMs]);
   return <Icon ref={iconRef} size={size} animateOnHover={false} aria-hidden="true" />;
 }
@@ -292,5 +487,10 @@ export function ScenarioIcon() {
 }
 
 export function ScenarioHeading() {
-  return <div className="eyebrow sidebar-heading"><ScenarioIcon /><span>Scenarios</span></div>;
+  return (
+    <div className="eyebrow sidebar-heading">
+      <ScenarioIcon />
+      <span>Scenarios</span>
+    </div>
+  );
 }

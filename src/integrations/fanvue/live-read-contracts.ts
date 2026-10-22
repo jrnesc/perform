@@ -1,7 +1,4 @@
-export type FanvueReadTransport = (
-  path: string,
-  init?: RequestInit,
-) => Promise<Response>;
+export type FanvueReadTransport = (path: string, init?: RequestInit) => Promise<Response>;
 
 export type LiveReadErrorCode =
   | "INVALID_RESPONSE"
@@ -27,7 +24,10 @@ export function readError(response: Response): LiveReadError {
     return new LiveReadError("RECONNECT_REQUIRED", "Reconnect to Fanvue before reading live data.");
   }
   if (response.status === 403) {
-    return new LiveReadError("PERMISSION_REQUIRED", "The connected creator has not granted the required read permission.");
+    return new LiveReadError(
+      "PERMISSION_REQUIRED",
+      "The connected creator has not granted the required read permission.",
+    );
   }
   if (response.status === 410) {
     // Sunset API version: retrying cannot help; the pinned X-Fanvue-API-Version must change.
@@ -47,7 +47,7 @@ export function readError(response: Response): LiveReadError {
 
 export function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 

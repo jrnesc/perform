@@ -5,7 +5,11 @@ import { OperatorEvidenceTables } from "./operator-view";
 
 const view: OperatorEvidenceView = {
   provenance: "REAL",
-  deadLetters: { total: 1, byReason: { INVALID_PAYLOAD: 1 }, recent: [{ id: "d", reason: "INVALID_PAYLOAD", eventId: "event-1", receivedAt: "2026-10-21T11:00:00.000Z" }] },
+  deadLetters: {
+    total: 1,
+    byReason: { INVALID_PAYLOAD: 1 },
+    recent: [{ id: "d", reason: "INVALID_PAYLOAD", eventId: "event-1", receivedAt: "2026-10-21T11:00:00.000Z" }],
+  },
   pendingReversals: { total: 0, oldest: [] },
   reconciliation: [],
   attribution: [{ experimentId: "experiment-1", messageMatched: 0, assignmentWindowOnly: 3, unmatchedPlausible: 0 }],

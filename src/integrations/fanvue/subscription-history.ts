@@ -64,22 +64,39 @@ function parsePeriod(value: unknown): Period | "skip" | null {
   const paidAt = timestamp(item.paidAt);
   const periodStart = timestamp(item.periodStart);
   const periodEnd = item.periodEnd === null ? null : timestamp(item.periodEnd);
-  if (!type || !eventTypes.has(type) || !paidAt || !periodStart || (item.periodEnd !== null && !periodEnd) ||
-      nonNegativeInteger(item.amountPaid) === null || typeof item.followsLapse !== "boolean" ||
-      typeof item.refunded !== "boolean" || typeof item.chargedBack !== "boolean") return null;
+  if (
+    !type ||
+    !eventTypes.has(type) ||
+    !paidAt ||
+    !periodStart ||
+    (item.periodEnd !== null && !periodEnd) ||
+    nonNegativeInteger(item.amountPaid) === null ||
+    typeof item.followsLapse !== "boolean" ||
+    typeof item.refunded !== "boolean" ||
+    typeof item.chargedBack !== "boolean"
+  )
+    return null;
   return {
-    type: type as Period["type"], paidAt, periodStart,
-    followsLapse: item.followsLapse, reversed: item.refunded || item.chargedBack,
+    type: type as Period["type"],
+    paidAt,
+    periodStart,
+    followsLapse: item.followsLapse,
+    reversed: item.refunded || item.chargedBack,
   };
 }
 
-function summarise(fanUuid: string, periods: readonly Period[], capturedAt: string, cutoff: number): FrozenSubscriptionHistory {
+function summarise(
+  fanUuid: string,
+  periods: readonly Period[],
+  capturedAt: string,
+  cutoff: number,
+): FrozenSubscriptionHistory {
   const before = periods.filter((period) => Date.parse(period.paidAt) <= cutoff);
-  const valid = before.filter((period) => !period.reversed)
-    .sort((a, b) => Date.parse(a.paidAt) - Date.parse(b.paidAt));
+  const valid = before.filter((period) => !period.reversed).sort((a, b) => Date.parse(a.paidAt) - Date.parse(b.paidAt));
   const starts = valid.map((period) => Date.parse(period.periodStart));
   return {
-    fanUuid, capturedAt,
+    fanUuid,
+    capturedAt,
     earliestSubscriptionAt: valid.length ? new Date(Math.min(...starts)).toISOString() : null,
     validPeriodCount: valid.length,
     hasTrial: valid.some((period) => period.type === "trial"),
@@ -128,7 +145,10 @@ export async function readSubscriptionHistories(input: {
     let cursor: string | null = null;
     let pages = 0;
     do {
-      if (pages >= maxPages || (cursor !== null && cursors.has(cursor))) { errors[fanUuid] = "pagination"; return; }
+      if (pages >= maxPages || (cursor !== null && cursors.has(cursor))) {
+        errors[fanUuid] = "pagination";
+        return;
+      }
       if (cursor) cursors.add(cursor);
       const query = new URLSearchParams({ size: String(pageSize) });
       if (cursor) query.set("cursor", cursor);
@@ -137,7 +157,10 @@ export async function readSubscriptionHistories(input: {
       );
       requestsMade += 1;
       pages += 1;
-      if (response.status === 404) { errors[fanUuid] = "not_found"; return; }
+      if (response.status === 404) {
+        errors[fanUuid] = "not_found";
+        return;
+      }
       const body = record(await json(response));
       const next = body?.nextCursor;
       if (!body || !Array.isArray(body.data) || !(next === null || typeof next === "string")) {
@@ -147,12 +170,18 @@ export async function readSubscriptionHistories(input: {
       for (const raw of body.data) {
         const period = parsePeriod(raw);
         if (period === "skip") continue;
-        if (!period) { errors[fanUuid] = "malformed"; return; }
+        if (!period) {
+          errors[fanUuid] = "malformed";
+          return;
+        }
         // No event ID exists, so identical periods repeated across pages collapse and
         // conflicting repeats cannot be told apart from corruption.
         const key = `${period.type}|${period.paidAt}|${period.periodStart}`;
         const prior = periods.get(key);
-        if (prior && JSON.stringify(prior) !== JSON.stringify(period)) { errors[fanUuid] = "malformed"; return; }
+        if (prior && JSON.stringify(prior) !== JSON.stringify(period)) {
+          errors[fanUuid] = "malformed";
+          return;
+        }
         periods.set(key, period);
       }
       cursor = next;
@@ -161,29 +190,28 @@ export async function readSubscriptionHistories(input: {
   }
 
   const queue = [...unique];
-  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
-    while (queue.length && !abort) {
-      const fanUuid = queue.shift()!;
-      try {
-        await readFan(fanUuid);
-      } catch (error) {
-        // 401/403/429/410/outage affect the whole credential or budget, not one fan.
-        abort = error instanceof LiveReadError ? error
-          : new LiveReadError("UNAVAILABLE", "Subscription history read failed.");
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+      while (queue.length && !abort) {
+        const fanUuid = queue.shift()!;
+        try {
+          await readFan(fanUuid);
+        } catch (error) {
+          // 401/403/429/410/outage affect the whole credential or budget, not one fan.
+          abort =
+            error instanceof LiveReadError
+              ? error
+              : new LiveReadError("UNAVAILABLE", "Subscription history read failed.");
+        }
       }
-    }
-  }));
+    }),
+  );
   if (abort) throw abort;
 
   return { snapshots: unique.flatMap((uuid) => snapshots.get(uuid) ?? []), errors, requestsMade };
 }
 
-export type SubscriberCohort =
-  | "never_subscribed"
-  | "trialing"
-  | "active_renewing"
-  | "active_not_renewing"
-  | "lapsed";
+export type SubscriberCohort = "never_subscribed" | "trialing" | "active_renewing" | "active_not_renewing" | "lapsed";
 
 /**
  * Combine lineage (history) with current state (Fan Insights `status` and renewal flag) read at
@@ -191,7 +219,10 @@ export type SubscriberCohort =
  */
 export function deriveSubscriberCohort(
   history: FrozenSubscriptionHistory,
-  current: { relationshipStatus: "subscriber" | "expired" | "follower" | "not_contactable"; autoRenewalEnabled: boolean },
+  current: {
+    relationshipStatus: "subscriber" | "expired" | "follower" | "not_contactable";
+    autoRenewalEnabled: boolean;
+  },
 ): SubscriberCohort | "CONFLICT" {
   const subscribed = current.relationshipStatus === "subscriber";
   if (history.validPeriodCount === 0) return subscribed ? "CONFLICT" : "never_subscribed";

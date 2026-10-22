@@ -1,7 +1,4 @@
-import {
-  fanvueSignatureContract,
-  verifyWebhookHmac,
-} from "@fanvue/builder-sdk";
+import { fanvueSignatureContract, verifyWebhookHmac } from "@fanvue/builder-sdk";
 import type { Arm } from "../../domain/allocation";
 
 export type CreatorEvidenceEvent =
@@ -78,9 +75,7 @@ type FrozenConclusion = {
   settledMinor: Readonly<Record<Arm, number>>;
 };
 
-const supportedEventTypes = new Set([
-  "creator.payment.succeeded", "creator.refund.created", "creator.dispute.created",
-]);
+const supportedEventTypes = new Set(["creator.payment.succeeded", "creator.refund.created", "creator.dispute.created"]);
 
 type Envelope = {
   id: string;
@@ -91,7 +86,7 @@ type Envelope = {
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : null;
 }
 
@@ -112,9 +107,7 @@ export async function sha256(bytes: Uint8Array): Promise<string> {
   const copy = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(copy).set(bytes);
   const digest = await crypto.subtle.digest("SHA-256", copy);
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function parseEnvelope(raw: unknown): Envelope | null {
@@ -137,18 +130,28 @@ function parsePayment(envelope: Envelope): CreatorEvidenceEvent | null {
   const paymentId = nonEmptyString(data.id);
   const purchaserUuid = nonEmptyString(purchaser?.uuid);
   const messageUuid = nonEmptyString(data.message_uuid);
-  const messageType = data.message_type === undefined || data.message_type === null
-    ? null : nonEmptyString(data.message_type);
+  const messageType =
+    data.message_type === undefined || data.message_type === null ? null : nonEmptyString(data.message_type);
   const grossMinor = nonNegativeInteger(data.gross);
   const netMinor = data.net === null ? null : nonNegativeInteger(data.net);
   const currency = data.currency === null ? null : nonEmptyString(data.currency);
   const occurredAt = isoTimestamp(data.paid_at) ?? isoTimestamp(data.created_at) ?? envelope.timestamp;
   if (
-    data.object !== "payment" || data.status !== "succeeded" || data.source !== "message" ||
-    data.paid_in_full !== true || !creatorUuid || !paymentId || !purchaserUuid ||
-    !messageUuid || (data.message_type != null && !messageType) || grossMinor === null || (data.net !== null && netMinor === null) ||
-    (data.currency !== null && !currency) || !occurredAt
-  ) return null;
+    data.object !== "payment" ||
+    data.status !== "succeeded" ||
+    data.source !== "message" ||
+    data.paid_in_full !== true ||
+    !creatorUuid ||
+    !paymentId ||
+    !purchaserUuid ||
+    !messageUuid ||
+    (data.message_type != null && !messageType) ||
+    grossMinor === null ||
+    (data.net !== null && netMinor === null) ||
+    (data.currency !== null && !currency) ||
+    !occurredAt
+  )
+    return null;
   return {
     kind: "PAYMENT",
     eventId: envelope.id,
@@ -171,8 +174,14 @@ function parseReversal(envelope: Envelope): CreatorEvidenceEvent | null {
   const currency = data.currency === null ? null : nonEmptyString(data.currency);
   const amountMinor = data.amount === null ? null : nonNegativeInteger(data.amount);
   const occurredAt = isoTimestamp(data.created_at) ?? envelope.timestamp;
-  if (!creatorUuid || !reversalId || (data.currency !== null && !currency) ||
-      (data.amount !== null && amountMinor === null) || !occurredAt) return null;
+  if (
+    !creatorUuid ||
+    !reversalId ||
+    (data.currency !== null && !currency) ||
+    (data.amount !== null && amountMinor === null) ||
+    !occurredAt
+  )
+    return null;
 
   if (envelope.type === "creator.refund.created") {
     const paymentId = nonEmptyString(data.payment_id);
@@ -238,9 +247,7 @@ export async function verifyAndParseCreatorEvidence(input: {
   // Fanvue asks receivers to acknowledge event types they do not handle, so those are
   // distinguished from a supported type whose payload is malformed.
   if (!supportedEventTypes.has(envelope.type)) return { accepted: false, reason: "UNSUPPORTED_EVENT" };
-  const event = envelope.type === "creator.payment.succeeded"
-    ? parsePayment(envelope)
-    : parseReversal(envelope);
+  const event = envelope.type === "creator.payment.succeeded" ? parsePayment(envelope) : parseReversal(envelope);
   if (!event) return { accepted: false, reason: "INVALID_PAYLOAD" };
   if (input.expectedCreatorUuid !== undefined && event.creatorUuid !== input.expectedCreatorUuid) {
     return { accepted: false, reason: "WRONG_CREATOR" };
@@ -313,8 +320,7 @@ export class CreatorEvidenceProjector {
         settledMinor[payment.arm] += payment.grossMinor;
       }
     }
-    const pendingReversals = [...this.reversals.keys()]
-      .filter((paymentId) => !this.payments.has(paymentId)).length;
+    const pendingReversals = [...this.reversals.keys()].filter((paymentId) => !this.payments.has(paymentId)).length;
     return {
       purchases,
       grossMinor,
@@ -346,11 +352,14 @@ export class CreatorEvidenceProjector {
     };
   }
 
-  appendReconciliation(input: Omit<ReconciliationSnapshot, "webhookSettledPurchases" | "webhookSettledMinor" | "discrepancy">): ReconciliationSnapshot {
+  appendReconciliation(
+    input: Omit<ReconciliationSnapshot, "webhookSettledPurchases" | "webhookSettledMinor" | "discrepancy">,
+  ): ReconciliationSnapshot {
     const projection = this.snapshot();
-    const discrepancy = (["A", "B"] as const).some((arm) =>
-      projection.settledPurchases[arm] !== input.reconciledSettledPurchases[arm] ||
-      projection.settledMinor[arm] !== input.reconciledSettledMinor[arm],
+    const discrepancy = (["A", "B"] as const).some(
+      (arm) =>
+        projection.settledPurchases[arm] !== input.reconciledSettledPurchases[arm] ||
+        projection.settledMinor[arm] !== input.reconciledSettledMinor[arm],
     );
     const snapshot: ReconciliationSnapshot = {
       ...input,

@@ -36,8 +36,15 @@ function parseAggregate(value: unknown): MassMessageAggregate | null {
   const viewCount = nonNegativeInteger(item?.viewCount);
   const purchaseCount = nonNegativeInteger(item?.purchaseCount);
   const totalRevenueMinor = nonNegativeInteger(item?.totalRevenue);
-  if (!uuid || !status || recipientCount === null || viewCount === null || purchaseCount === null ||
-      totalRevenueMinor === null) return null;
+  if (
+    !uuid ||
+    !status ||
+    recipientCount === null ||
+    viewCount === null ||
+    purchaseCount === null ||
+    totalRevenueMinor === null
+  )
+    return null;
   return { uuid, status, recipientCount, viewCount, purchaseCount, totalRevenueMinor };
 }
 

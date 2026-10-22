@@ -7,10 +7,7 @@ export type ExperimentResultDetail = {
   availability: "AVAILABLE" | "NO_EVIDENCE";
 };
 
-export function assertResultBelongsToExperiment(
-  experiment: ExperimentRecord,
-  result: AnalysedResult,
-): void {
+export function assertResultBelongsToExperiment(experiment: ExperimentRecord, result: AnalysedResult): void {
   const fixture = result.fixture;
   if (
     fixture.experimentId !== experiment.id ||

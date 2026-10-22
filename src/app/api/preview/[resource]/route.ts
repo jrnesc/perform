@@ -69,7 +69,7 @@ export async function POST(request: Request, context: { params: Promise<{ resour
   const { resource } = await context.params;
   if (resource === "dry-run") {
     try {
-      const body = await request.json() as Record<string, unknown>;
+      const body = (await request.json()) as Record<string, unknown>;
       if (typeof body.id !== "string" || typeof body.name !== "string") {
         return invalid("Experiment ID and name are required.");
       }
@@ -102,7 +102,7 @@ export async function POST(request: Request, context: { params: Promise<{ resour
     }
   }
   if (resource === "results") {
-    const body = await request.json().catch(() => ({})) as { experimentId?: string };
+    const body = (await request.json().catch(() => ({}))) as { experimentId?: string };
     const experiment = DEMO_EXPERIMENT_HISTORY.find(({ id }) => id === body.experimentId);
     if (!experiment) return unavailable();
     const fixture = DEMO_RESULT_FIXTURES.find(({ experimentId }) => experimentId === experiment.id);

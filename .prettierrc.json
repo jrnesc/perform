@@ -1,0 +1,8 @@
+{
+  "overrides": [
+    {
+      "files": ["*.ts", "*.tsx", "*.mts"],
+      "options": { "printWidth": 120 }
+    }
+  ]
+}

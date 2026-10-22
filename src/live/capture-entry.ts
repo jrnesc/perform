@@ -13,7 +13,9 @@ import {
 
 /** Capture reads the smart list, purchase enrichment and subscription history, so needs all three. */
 export const captureCapabilities: readonly LiveCapabilityId[] = [
-  "audience_discovery", "subscriber_state", "purchase_enrichment",
+  "audience_discovery",
+  "subscriber_state",
+  "purchase_enrichment",
 ];
 
 export type VerifiedCreatorSession = { userUuid: string; isCreator: boolean; scope: string | null };
@@ -49,7 +51,9 @@ export async function runGuardedLiveAudienceCapture(input: {
   activated: readonly LiveCapabilityId[];
   experimentId: string;
   source: AudienceSource;
-  repositories: (creatorUuid: string) => Promise<{ repository: PerformRepository; evidenceRepository: LiveEvidenceRepository }>;
+  repositories: (
+    creatorUuid: string,
+  ) => Promise<{ repository: PerformRepository; evidenceRepository: LiveEvidenceRepository }>;
   transport: () => FanvueReadTransport;
   now: () => string;
   commandId: string;
@@ -71,20 +75,30 @@ export async function runGuardedLiveAudienceCapture(input: {
   // Repositories are scoped to the verified creator, so another creator's experiment is not found.
   const { repository, evidenceRepository } = await input.repositories(session.userUuid);
   const experiment = await repository.getExperiment(input.experimentId);
-  if (!experiment || experiment.creatorUuid !== session.userUuid) return { status: "REFUSED", reason: "EXPERIMENT_NOT_FOUND" };
+  if (!experiment || experiment.creatorUuid !== session.userUuid)
+    return { status: "REFUSED", reason: "EXPERIMENT_NOT_FOUND" };
   if (experiment.dataProvenance !== "REAL") return { status: "REFUSED", reason: "NOT_REAL_PROVENANCE" };
-  if (experiment.sourceAudienceUuid !== input.source.uuid) return { status: "REFUSED", reason: "SOURCE_AUDIENCE_MISMATCH" };
+  if (experiment.sourceAudienceUuid !== input.source.uuid)
+    return { status: "REFUSED", reason: "SOURCE_AUDIENCE_MISMATCH" };
 
   const capturedAt = input.now();
   const capture = await captureLiveAudience({
-    experimentId: experiment.id, source: input.source, capturedAt, assignmentCutoff: capturedAt,
+    experimentId: experiment.id,
+    source: input.source,
+    capturedAt,
+    assignmentCutoff: capturedAt,
     transport: input.transport(),
   });
   if (capture.status === "INCOMPLETE") {
     return { status: "INCOMPLETE", reasons: capture.reasons, failedFanCount: capture.failedFanUuids.length };
   }
   await persistLiveAudienceSnapshot({
-    repository, evidenceRepository, experimentId: experiment.id, source: input.source, capture, commandId: input.commandId,
+    repository,
+    evidenceRepository,
+    experimentId: experiment.id,
+    source: input.source,
+    capture,
+    commandId: input.commandId,
   });
   return { status: "ALLOCATED", snapshotCount: capture.assignments.length, armCounts: capture.armCounts };
 }

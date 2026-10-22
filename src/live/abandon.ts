@@ -38,7 +38,9 @@ export async function abandonInterruptedLaunch(input: {
   const lists = await Promise.all((["A", "B"] as const).map((arm) => input.launchRepository.getList(arm)));
   for (const list of lists) {
     if (list && (list.status === "CREATING" || list.status === "UNKNOWN")) {
-      reasons.push(`Arm ${list.arm} list creation is uncertain, so a list may exist that Perform cannot delete; this needs operator review`);
+      reasons.push(
+        `Arm ${list.arm} list creation is uncertain, so a list may exist that Perform cannot delete; this needs operator review`,
+      );
     }
   }
   if (reasons.length > 0) return { status: "REFUSED", reasons };
@@ -55,8 +57,11 @@ export async function abandonInterruptedLaunch(input: {
     deletedLists += 1;
   }
   await input.repository.transitionExperiment({
-    commandId: `${experiment.id}:abandoned`, experimentId: experiment.id, to: "INVALID",
-    occurredAt: input.now(), evidence: { invalidReason: abandonedReason },
+    commandId: `${experiment.id}:abandoned`,
+    experimentId: experiment.id,
+    to: "INVALID",
+    occurredAt: input.now(),
+    evidence: { invalidReason: abandonedReason },
   });
   return { status: "ABANDONED", deletedLists };
 }

@@ -5,15 +5,25 @@ import { assignmentWindowCaveat } from "../../live/attribution";
 import { analyseResult } from "../../results/analyse";
 import { DEMO_RESULT_FIXTURES } from "../../results/demo-results-v1";
 import { experimentResultDetail } from "../../results/experiment-results";
-import { ProgressStrip, ResultComparison, ScenarioHeading, StageIcon, initialResultId, isProgressCompact, resetResultsViewport, setupStages } from "./experiment-experience";
+import {
+  ProgressStrip,
+  ResultComparison,
+  ScenarioHeading,
+  StageIcon,
+  initialResultId,
+  isProgressCompact,
+  resetResultsViewport,
+  setupStages,
+} from "./experiment-experience";
 import styles from "./experiment-experience.module.css";
 import { AudienceEvidencePanel, ExperimentHistory, previewHistoryStorageKey } from "./experiment-history";
 
 describe("Experiment dashboard", () => {
   it("keeps a compact representative fixture set in a semantic table", () => {
     localStorage.removeItem(previewHistoryStorageKey);
-    expect(DEMO_EXPERIMENT_HISTORY).toHaveLength(4);
+    expect(DEMO_EXPERIMENT_HISTORY).toHaveLength(5);
     expect(DEMO_EXPERIMENT_HISTORY.map(({ state }) => state)).toEqual([
+      "CLOSED",
       "CLOSED",
       "RUNNING",
       "PARTIAL_LAUNCH",
@@ -22,17 +32,27 @@ describe("Experiment dashboard", () => {
 
     render(<ExperimentHistory preview />);
     const table = screen.getByRole("table");
-    expect(within(table).getAllByRole("row")).toHaveLength(5);
-    expect(within(table).getAllByRole("link")).toHaveLength(4);
+    expect(within(table).getAllByRole("row")).toHaveLength(6);
+    expect(within(table).getAllByRole("link")).toHaveLength(5);
     expect(within(table).getByText("Specific preview copy")).not.toBeNull();
-    expect(screen.getByText(/Four fixtures cover ready, running and blocked outcomes/)).not.toBeNull();
+    expect(
+      screen.getByText(
+        /Five fixtures cover a clear winner, a clear no-difference, a running test and blocked launches/,
+      ),
+    ).not.toBeNull();
   });
 
   it("renders only the result linked to the experiment in the detail URL", () => {
     render(<ExperimentHistory preview selectedId="demo:experiment:copy-complete" />);
     expect(screen.getByRole("heading", { name: "Specific preview copy", level: 1 })).not.toBeNull();
-    expect(screen.getByRole("heading", { name: /Arm B produced 33% more settled purchases/ })).not.toBeNull();
-    expect(screen.getAllByRole("heading", { level: 2 }).map(({ textContent }) => textContent)).toEqual(["What was tested", "How sure is this?", "Who converted and reversed?"]);
+    expect(
+      screen.getByRole("heading", { name: /Arm B produced 15 percentage points more settled purchases/ }),
+    ).not.toBeNull();
+    expect(screen.getAllByRole("heading", { level: 2 }).map(({ textContent }) => textContent)).toEqual([
+      "What was tested",
+      "How sure is this?",
+      "Who converted and reversed?",
+    ]);
     expect(screen.queryByText("Two PPV price points")).toBeNull();
   });
 
@@ -64,24 +84,67 @@ describe("Experiment dashboard", () => {
   });
 
   it("renders live results for a launched REAL experiment, and the reason when they are unavailable", () => {
-    const experiment = { ...DEMO_EXPERIMENT_HISTORY[1], id: "real-1", dataProvenance: "REAL" as const, state: "RUNNING" as const };
-    const real = [{ ...experiment, launch: { scheduledAt: "2026-10-22T10:02:00Z", observationEndsAt: "2026-10-29T10:02:00Z", armCounts: { A: 1, B: 1 } }, reconciliation: null }];
+    const experiment = {
+      ...DEMO_EXPERIMENT_HISTORY[1],
+      id: "real-1",
+      dataProvenance: "REAL" as const,
+      state: "RUNNING" as const,
+    };
+    const real = [
+      {
+        ...experiment,
+        launch: {
+          scheduledAt: "2026-10-22T10:02:00Z",
+          observationEndsAt: "2026-10-29T10:02:00Z",
+          armCounts: { A: 1, B: 1 },
+        },
+        reconciliation: null,
+      },
+    ];
     const evidence = DEMO_RESULT_FIXTURES[0].audienceEvidence!.map((row) => ({ ...row, provenance: "REAL" as const }));
-    const breakdown = { provenance: "REAL" as const, attributionStrategy: "ASSIGNMENT_WINDOW" as const, evidence, assignmentWindowOnly: 0, unmatchedPlausible: 0, caveat: null };
+    const breakdown = {
+      provenance: "REAL" as const,
+      attributionStrategy: "ASSIGNMENT_WINDOW" as const,
+      evidence,
+      assignmentWindowOnly: 0,
+      unmatchedPlausible: 0,
+      caveat: null,
+    };
     const converted = (arm: "A" | "B") => evidence.filter((row) => row.arm === arm && row.converted).length;
     const assigned = (arm: "A" | "B") => evidence.filter((row) => row.arm === arm).length;
-    render(<ExperimentHistory preview={false} selectedId="real-1" realExperiments={real} liveResults={{ status: "available", breakdown }} />);
+    render(
+      <ExperimentHistory
+        preview={false}
+        selectedId="real-1"
+        realExperiments={real}
+        liveResults={{ status: "available", breakdown }}
+      />,
+    );
     expect(screen.getByRole("heading", { name: "Results so far" })).not.toBeNull();
     expect(screen.queryByText("Awaiting purchases")).toBeNull();
     expect(screen.getByText(`${converted("A")} of ${assigned("A")}`)).not.toBeNull();
     expect(screen.getByText(`${converted("B")} of ${assigned("B")}`)).not.toBeNull();
     expect(screen.getAllByText("Live Fanvue evidence").length).toBeGreaterThan(0);
     cleanup();
-    render(<ExperimentHistory preview={false} selectedId="real-1" realExperiments={[{ ...real[0], state: "CLOSED" }]} liveResults={{ status: "available", breakdown }} />);
+    render(
+      <ExperimentHistory
+        preview={false}
+        selectedId="real-1"
+        realExperiments={[{ ...real[0], state: "CLOSED" }]}
+        liveResults={{ status: "available", breakdown }}
+      />,
+    );
     expect(screen.getByRole("heading", { name: "Final result" })).not.toBeNull();
     expect(screen.getByText("Live · frozen at close")).not.toBeNull();
     cleanup();
-    render(<ExperimentHistory preview={false} selectedId="real-1" realExperiments={real} liveResults={{ status: "unavailable", message: "Live results could not be read right now." }} />);
+    render(
+      <ExperimentHistory
+        preview={false}
+        selectedId="real-1"
+        realExperiments={real}
+        liveResults={{ status: "unavailable", message: "Live results could not be read right now." }}
+      />,
+    );
     expect(screen.getByRole("heading", { name: "Awaiting purchases" })).not.toBeNull();
     expect(screen.getByText("Live results could not be read right now.")).not.toBeNull();
   });
@@ -89,10 +152,12 @@ describe("Experiment dashboard", () => {
   it("fails closed when result evidence names a different experiment", () => {
     const experiment = DEMO_EXPERIMENT_HISTORY[0];
     const result = analyseResult(DEMO_RESULT_FIXTURES[0]);
-    expect(() => experimentResultDetail(experiment, {
-      ...result,
-      fixture: { ...result.fixture, experimentId: "demo:experiment:other" },
-    })).toThrow(/does not match/);
+    expect(() =>
+      experimentResultDetail(experiment, {
+        ...result,
+        fixture: { ...result.fixture, experimentId: "demo:experiment:other" },
+      }),
+    ).toThrow(/does not match/);
   });
 });
 
@@ -118,13 +183,23 @@ describe("Experiment setup progress", () => {
   });
 
   it("marks the newly current progress and title icons to animate on appearance", () => {
-    const { container } = render(<><ProgressStrip current={1} /><StageIcon stage="Asset" decorative animateOnAppear /></>);
+    const { container } = render(
+      <>
+        <ProgressStrip current={1} />
+        <StageIcon stage="Asset" decorative animateOnAppear />
+      </>,
+    );
     expect(container.querySelectorAll('[data-animate-on-appear="true"]')).toHaveLength(2);
     expect(screen.getByLabelText("Asset, current").querySelector('[data-animate-on-appear="true"]')).not.toBeNull();
   });
 
   it("keeps the progress strip still but loops continuous heading icons", () => {
-    const { container } = render(<><ProgressStrip current={1} /><StageIcon stage="Asset" decorative continuous /></>);
+    const { container } = render(
+      <>
+        <ProgressStrip current={1} />
+        <StageIcon stage="Asset" decorative continuous />
+      </>,
+    );
     expect(container.querySelectorAll(`.${styles.stageIcon} svg`)).toHaveLength(6);
     expect(screen.getByLabelText("Asset, current").querySelector('[data-animate-on-appear="true"]')).not.toBeNull();
   });
@@ -171,7 +246,7 @@ describe("Aggregate results comparison", () => {
     expect(revenue.getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText("Unit · USD")).not.toBeNull();
     const table = screen.getByRole("table", { name: "Exact aggregate values and assigned-recipient denominators" });
-    expect(within(table).getAllByText("12")).toHaveLength(2);
+    expect(within(table).getAllByText("120")).toHaveLength(2);
     fireEvent.click(screen.getByRole("radio", { name: "Reversals" }));
     expect(screen.getByText("Unit · events")).not.toBeNull();
   });

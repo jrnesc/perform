@@ -2,14 +2,16 @@ import type { Assignment, AudienceMember, Arm } from "../domain/allocation";
 import type { ExperimentVariable, VariantDefinition } from "../domain/experiment-state";
 import type { AssetProvenance, MediaAsset } from "../workspace/contracts";
 
-export type AudienceProvenance = {
-  kind: "DEMO_SEEDED";
-  label: "Seeded demo data";
-  fixtureVersion: string;
-} | {
-  kind: "FANVUE";
-  label: "Live Fanvue audience";
-};
+export type AudienceProvenance =
+  | {
+      kind: "DEMO_SEEDED";
+      label: "Seeded demo data";
+      fixtureVersion: string;
+    }
+  | {
+      kind: "FANVUE";
+      label: "Live Fanvue audience";
+    };
 
 export type AudienceExclusion = {
   reason: "MUTED" | "CREATOR_ACCOUNT" | "NOT_CONTACTABLE" | "DUPLICATE";

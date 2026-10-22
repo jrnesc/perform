@@ -116,6 +116,8 @@ export type ArmResult = {
   assignedRecipients: number;
   grossPurchases: number;
   settledPurchases: number;
+  /** Distinct fans with at least one settled purchase; the copy-test numerator. */
+  settledBuyers: number;
   reversedPurchases: number;
   grossRevenueMinor: number;
   settledRevenueMinor: number;

@@ -9,7 +9,10 @@ import type { SqlDatabase } from "../persistence/d1-perform-repository";
  */
 class SqliteStatement {
   private values: SQLInputValue[] = [];
-  constructor(private readonly db: DatabaseSync, readonly query: string) {}
+  constructor(
+    private readonly db: DatabaseSync,
+    readonly query: string,
+  ) {}
 
   bind(...values: SQLInputValue[]) {
     this.values = values;
@@ -33,7 +36,9 @@ class SqliteStatement {
 export function createMigratedDatabase(): { sqlite: DatabaseSync; db: SqlDatabase } {
   const sqlite = new DatabaseSync(":memory:");
   const dir = join(process.cwd(), "migrations");
-  for (const file of readdirSync(dir).filter((name) => name.endsWith(".sql")).sort()) {
+  for (const file of readdirSync(dir)
+    .filter((name) => name.endsWith(".sql"))
+    .sort()) {
     sqlite.exec(readFileSync(join(dir, file), "utf8"));
   }
   const db = {

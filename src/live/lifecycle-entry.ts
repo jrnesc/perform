@@ -12,6 +12,7 @@ import type { CapabilityRecordSnapshot } from "./capability-records";
 import type { VerifiedCreatorSession } from "./capture-entry";
 import { abandonInterruptedLaunch, type AbandonResult } from "./abandon";
 import { closeExperimentIfReady, type CloseResult } from "./close";
+import { cancelScheduledLaunch } from "./launch";
 import type { LaunchRepository } from "./launch-repository";
 import { reconcileObservation } from "./reconciliation";
 
@@ -22,7 +23,12 @@ export const closeCapabilities: readonly LiveCapabilityId[] = ["send"];
 
 export type LifecycleRefusal = {
   status: "REFUSED";
-  reason: "NOT_A_VERIFIED_CREATOR" | "WRITE_MODE_DISABLED" | "CAPABILITY_NOT_ACTIVE" | "EXPERIMENT_NOT_FOUND" | "NOT_REAL_PROVENANCE";
+  reason:
+    | "NOT_A_VERIFIED_CREATOR"
+    | "WRITE_MODE_DISABLED"
+    | "CAPABILITY_NOT_ACTIVE"
+    | "EXPERIMENT_NOT_FOUND"
+    | "NOT_REAL_PROVENANCE";
   capabilities?: Readonly<Partial<Record<LiveCapabilityId, CapabilityState>>>;
 };
 
@@ -57,58 +63,98 @@ async function guard(
   });
   if (required.some((id) => states[id].state !== "active")) {
     return {
-      status: "REFUSED", reason: "CAPABILITY_NOT_ACTIVE",
+      status: "REFUSED",
+      reason: "CAPABILITY_NOT_ACTIVE",
       capabilities: Object.fromEntries(required.map((id) => [id, states[id].state])),
     };
   }
   const repositories = await input.repositories(session.userUuid);
   const experiment = await repositories.repository.getExperiment(input.experimentId);
-  if (!experiment || experiment.creatorUuid !== session.userUuid) return { status: "REFUSED", reason: "EXPERIMENT_NOT_FOUND" };
+  if (!experiment || experiment.creatorUuid !== session.userUuid)
+    return { status: "REFUSED", reason: "EXPERIMENT_NOT_FOUND" };
   if (experiment.dataProvenance !== "REAL") return { status: "REFUSED", reason: "NOT_REAL_PROVENANCE" };
   return { creatorUuid: session.userUuid, repositories };
 }
 
 /** The only REAL entry point for a manual reconciliation: reads earnings and mass-message totals. */
-export async function runGuardedReconciliation(input: GuardInput & {
-  transport: () => FanvueReadTransport;
-  now: () => string;
-  newId: () => string;
-}): Promise<LifecycleRefusal | { status: "RECONCILED"; record: ReconciliationRecord }> {
+export async function runGuardedReconciliation(
+  input: GuardInput & {
+    transport: () => FanvueReadTransport;
+    now: () => string;
+    newId: () => string;
+  },
+): Promise<LifecycleRefusal | { status: "RECONCILED"; record: ReconciliationRecord }> {
   const gate = await guard(input, reconcileCapabilities, false);
   if ("status" in gate) return gate;
   const record = await reconcileObservation({
-    experimentId: input.experimentId, creatorUuid: gate.creatorUuid, ...gate.repositories,
-    transport: input.transport(), now: input.now, newId: input.newId,
+    experimentId: input.experimentId,
+    creatorUuid: gate.creatorUuid,
+    ...gate.repositories,
+    transport: input.transport(),
+    now: input.now,
+    newId: input.newId,
   });
   return { status: "RECONCILED", record };
 }
 
 /** The only REAL entry point for close: it deletes both custom lists in Fanvue. */
-export async function runGuardedClose(input: GuardInput & {
-  transport: () => FanvueWriteTransport;
-  now: () => string;
-}): Promise<LifecycleRefusal | { status: "CHECKED"; result: CloseResult }> {
+export async function runGuardedClose(
+  input: GuardInput & {
+    transport: () => FanvueWriteTransport;
+    now: () => string;
+  },
+): Promise<LifecycleRefusal | { status: "CHECKED"; result: CloseResult }> {
   const gate = await guard(input, closeCapabilities, true);
   if ("status" in gate) return gate;
   const { repository, launchRepository, evidenceRepository } = gate.repositories;
   const latestReconciliation = (await evidenceRepository.listReconciliations(input.experimentId)).at(-1) ?? null;
   const result = await closeExperimentIfReady({
-    experimentId: input.experimentId, latestReconciliation, repository, launchRepository,
-    transport: input.transport(), now: input.now,
+    experimentId: input.experimentId,
+    latestReconciliation,
+    repository,
+    launchRepository,
+    transport: input.transport(),
+    now: input.now,
   });
   return { status: "CHECKED", result };
 }
 
 /** The only REAL entry point for abandoning an interrupted launch: it deletes custom lists in Fanvue. */
-export async function runGuardedAbandon(input: GuardInput & {
-  transport: () => FanvueWriteTransport;
-  now: () => string;
-}): Promise<LifecycleRefusal | { status: "CHECKED"; result: AbandonResult }> {
+export async function runGuardedAbandon(
+  input: GuardInput & {
+    transport: () => FanvueWriteTransport;
+    now: () => string;
+  },
+): Promise<LifecycleRefusal | { status: "CHECKED"; result: AbandonResult }> {
   const gate = await guard(input, closeCapabilities, true);
   if ("status" in gate) return gate;
   const { repository, launchRepository } = gate.repositories;
   const result = await abandonInterruptedLaunch({
-    experimentId: input.experimentId, repository, launchRepository, transport: input.transport(), now: input.now,
+    experimentId: input.experimentId,
+    repository,
+    launchRepository,
+    transport: input.transport(),
+    now: input.now,
+  });
+  return { status: "CHECKED", result };
+}
+
+/** The only REAL entry point for cancelling a scheduled launch: it cancels messages and deletes lists. */
+export async function runGuardedCancel(
+  input: GuardInput & {
+    transport: () => FanvueWriteTransport;
+    now: () => string;
+  },
+): Promise<LifecycleRefusal | { status: "CHECKED"; result: Awaited<ReturnType<typeof cancelScheduledLaunch>> }> {
+  const gate = await guard(input, closeCapabilities, true);
+  if ("status" in gate) return gate;
+  const { repository, launchRepository } = gate.repositories;
+  const result = await cancelScheduledLaunch({
+    experimentId: input.experimentId,
+    repository,
+    launchRepository,
+    transport: input.transport(),
+    now: input.now,
   });
   return { status: "CHECKED", result };
 }

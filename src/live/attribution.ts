@@ -59,8 +59,9 @@ export interface PurchaseAttributionStrategy {
 export function inSendWindow(occurredAt: string, window: SendWindow | null): boolean {
   if (!window) return false;
   const at = Date.parse(occurredAt);
-  return !Number.isNaN(at) && at >= Date.parse(window.startAt) &&
-    (window.endAt === null || at < Date.parse(window.endAt));
+  return (
+    !Number.isNaN(at) && at >= Date.parse(window.startAt) && (window.endAt === null || at < Date.parse(window.endAt))
+  );
 }
 
 function messageMatch(candidates: readonly AttributionCandidate[]): AttributionDecision | null {
@@ -75,8 +76,9 @@ function messageMatch(candidates: readonly AttributionCandidate[]): AttributionD
 
 function plausible(payment: AttributablePayment, candidates: readonly AttributionCandidate[]) {
   if (payment.messageType !== broadcastMessageType) return [];
-  return candidates.filter((candidate) =>
-    candidate.assignedArm !== null && inSendWindow(payment.occurredAt, candidate.window));
+  return candidates.filter(
+    (candidate) => candidate.assignedArm !== null && inSendWindow(payment.occurredAt, candidate.window),
+  );
 }
 
 export const messageUuidMatchStrategy: PurchaseAttributionStrategy = {

@@ -18,7 +18,11 @@ describe("REAL Results entry", () => {
   it("refuses below active without opening evidence repositories", async () => {
     const repositories = vi.fn();
     const result = await runGuardedLiveResults({
-      session, env, records: { verified: [], activated: [] }, experimentId: "experiment", repositories,
+      session,
+      env,
+      records: { verified: [], activated: [] },
+      experimentId: "experiment",
+      repositories,
     });
     expect(result).toMatchObject({ status: "REFUSED", reason: "CAPABILITY_NOT_ACTIVE" });
     expect(repositories).not.toHaveBeenCalled();
@@ -35,9 +39,15 @@ describe("REAL Results entry", () => {
     }));
     const repository = {
       getExperiment: async () => ({
-        id: experimentId, name: "Live result", creatorUuid: "creator", dataProvenance: "REAL",
-        state: "RUNNING", variable: "COPY", hypothesis: "Specific copy wins",
-        sourceAudienceUuid: "subscribers", createdAt: fixture.observation.startedAt,
+        id: experimentId,
+        name: "Live result",
+        creatorUuid: "creator",
+        dataProvenance: "REAL",
+        state: "RUNNING",
+        variable: "COPY",
+        hypothesis: "Specific copy wins",
+        sourceAudienceUuid: "subscribers",
+        createdAt: fixture.observation.startedAt,
         updatedAt: fixture.observation.startedAt,
       }),
     } as unknown as PerformRepository;
@@ -48,11 +58,16 @@ describe("REAL Results entry", () => {
     } as unknown as LiveEvidenceRepository;
     const records = { verified: liveResultsCapabilities, activated: liveResultsCapabilities };
     const result = await runGuardedLiveResults({
-      session, env, records, experimentId,
+      session,
+      env,
+      records,
+      experimentId,
       repositories: async () => ({ repository, evidenceRepository }),
     });
     expect(result).toMatchObject({
-      status: "AVAILABLE", provenance: "REAL", experimentId,
+      status: "AVAILABLE",
+      provenance: "REAL",
+      experimentId,
       breakdown: { provenance: "REAL", attributionStrategy: "ASSIGNMENT_WINDOW", caveat: assignmentWindowCaveat },
     });
   });

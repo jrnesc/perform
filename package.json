@@ -13,6 +13,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "format:css": "prettier --write \"src/**/*.css\"",
     "format:css:check": "prettier --check \"src/**/*.css\""
   },

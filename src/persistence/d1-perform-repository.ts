@@ -37,9 +37,7 @@ interface SqlStatement {
 /** The subset of D1Database used here, kept out of the domain and port types. */
 export interface SqlDatabase {
   prepare(query: string): SqlStatement;
-  batch<Row = Record<string, unknown>>(
-    statements: readonly SqlStatement[],
-  ): Promise<SqlResult<Row>[]>;
+  batch<Row = Record<string, unknown>>(statements: readonly SqlStatement[]): Promise<SqlResult<Row>[]>;
 }
 
 interface ExperimentRow {
@@ -148,14 +146,7 @@ export class D1PerformRepository implements PerformRepository {
                experiment_id, arm, copy_text, price_minor, currency, media_uuid
              ) VALUES (?, ?, ?, ?, ?, ?)`,
           )
-          .bind(
-            input.id,
-            variant.arm,
-            variant.copy,
-            variant.priceMinor,
-            variant.currency,
-            variant.mediaUuid,
-          ),
+          .bind(input.id, variant.arm, variant.copy, variant.priceMinor, variant.currency, variant.mediaUuid),
       ),
     ];
 
@@ -234,12 +225,18 @@ export class D1PerformRepository implements PerformRepository {
 
   async listAssignments(experimentId: string): Promise<readonly Assignment[]> {
     await this.requireExperiment(experimentId);
-    const rows = await this.db.prepare(
-      `SELECT fan_uuid, arm, stratum, algorithm_version
+    const rows = await this.db
+      .prepare(
+        `SELECT fan_uuid, arm, stratum, algorithm_version
        FROM assignments WHERE experiment_id = ? ORDER BY arm, fan_uuid`,
-    ).bind(experimentId).all<{
-      fan_uuid: string; arm: "A" | "B"; stratum: string; algorithm_version: string;
-    }>();
+      )
+      .bind(experimentId)
+      .all<{
+        fan_uuid: string;
+        arm: "A" | "B";
+        stratum: string;
+        algorithm_version: string;
+      }>();
     return (rows.results ?? []).map((row) => {
       requireValue(row.algorithm_version === allocationAlgorithmVersion, "Assignment algorithm version mismatch");
       return {
@@ -253,36 +250,61 @@ export class D1PerformRepository implements PerformRepository {
 
   async listVariants(experimentId: string) {
     await this.requireExperiment(experimentId);
-    const rows = await this.db.prepare(
-      `SELECT arm, copy_text, price_minor, currency, media_uuid
+    const rows = await this.db
+      .prepare(
+        `SELECT arm, copy_text, price_minor, currency, media_uuid
        FROM variants WHERE experiment_id = ? ORDER BY arm`,
-    ).bind(experimentId).all<{
-      arm: "A" | "B"; copy_text: string; price_minor: number; currency: string; media_uuid: string;
-    }>();
+      )
+      .bind(experimentId)
+      .all<{
+        arm: "A" | "B";
+        copy_text: string;
+        price_minor: number;
+        currency: string;
+        media_uuid: string;
+      }>();
     return (rows.results ?? []).map((row) => ({
-      arm: row.arm, copy: row.copy_text, priceMinor: row.price_minor,
-      currency: row.currency, mediaUuid: row.media_uuid,
+      arm: row.arm,
+      copy: row.copy_text,
+      priceMinor: row.price_minor,
+      currency: row.currency,
+      mediaUuid: row.media_uuid,
     }));
   }
 
   async listSendIntents(experimentId: string): Promise<readonly StoredSendIntent[]> {
     await this.requireExperiment(experimentId);
-    const rows = await this.db.prepare(
-      `SELECT id, experiment_id, arm, idempotency_key, payload_json, payload_hash,
+    const rows = await this.db
+      .prepare(
+        `SELECT id, experiment_id, arm, idempotency_key, payload_json, payload_hash,
               status, external_message_uuid, scheduled_at, recipient_count,
               cancelled_at, created_at
        FROM send_intents
        WHERE experiment_id = ? AND creator_uuid = ? ORDER BY arm`,
-    ).bind(experimentId, this.creatorUuid).all<{
-      id: string; experiment_id: string; arm: "A" | "B"; idempotency_key: string;
-      payload_json: string; payload_hash: string; status: StoredSendIntent["status"];
-      external_message_uuid: string | null; scheduled_at: string | null;
-      recipient_count: number | null; cancelled_at: string | null; created_at: string;
-    }>();
+      )
+      .bind(experimentId, this.creatorUuid)
+      .all<{
+        id: string;
+        experiment_id: string;
+        arm: "A" | "B";
+        idempotency_key: string;
+        payload_json: string;
+        payload_hash: string;
+        status: StoredSendIntent["status"];
+        external_message_uuid: string | null;
+        scheduled_at: string | null;
+        recipient_count: number | null;
+        cancelled_at: string | null;
+        created_at: string;
+      }>();
     return (rows.results ?? []).map((row) => ({
-      id: row.id, experimentId: row.experiment_id, arm: row.arm,
-      idempotencyKey: row.idempotency_key, payloadJson: row.payload_json,
-      payloadHash: row.payload_hash, status: row.status,
+      id: row.id,
+      experimentId: row.experiment_id,
+      arm: row.arm,
+      idempotencyKey: row.idempotency_key,
+      payloadJson: row.payload_json,
+      payloadHash: row.payload_hash,
+      status: row.status,
       externalMessageUuid: row.external_message_uuid ?? undefined,
       scheduledAt: row.scheduled_at ?? undefined,
       recipientCount: row.recipient_count ?? undefined,
@@ -312,10 +334,12 @@ export class D1PerformRepository implements PerformRepository {
 
   async listExperimentSummaries() {
     const experiments = await this.listExperiments();
-    return Promise.all(experiments.map(async (experiment) => {
-      const result = await this.getExperimentResult(experiment.id);
-      return { experiment, result: experimentResultSummary(experiment, result) };
-    }));
+    return Promise.all(
+      experiments.map(async (experiment) => {
+        const result = await this.getExperimentResult(experiment.id);
+        return { experiment, result: experimentResultSummary(experiment, result) };
+      }),
+    );
   }
 
   async saveAssignmentChunk(
@@ -331,9 +355,7 @@ export class D1PerformRepository implements PerformRepository {
     const experiment = await this.requireExperiment(experimentId);
     requireValue(experiment.state === "SNAPSHOTTING", "Assignments require SNAPSHOTTING state");
     requireValue(
-      assignments.every(({ algorithmVersion }) =>
-        algorithmVersion === allocationAlgorithmVersion,
-      ),
+      assignments.every(({ algorithmVersion }) => algorithmVersion === allocationAlgorithmVersion),
       "Assignment algorithm version mismatch",
     );
 
@@ -648,8 +670,8 @@ export class D1PerformRepository implements PerformRepository {
           command.occurredAt,
           command.to,
           command.occurredAt,
-          terminal ? command.fanDataDeleteAfter ?? defaults?.fanDataDeleteAfter ?? null : null,
-          terminal ? command.aggregateDeleteAfter ?? defaults?.aggregateDeleteAfter ?? null : null,
+          terminal ? (command.fanDataDeleteAfter ?? defaults?.fanDataDeleteAfter ?? null) : null,
+          terminal ? (command.aggregateDeleteAfter ?? defaults?.aggregateDeleteAfter ?? null) : null,
           command.experimentId,
           this.creatorUuid,
           this.dataProvenance,

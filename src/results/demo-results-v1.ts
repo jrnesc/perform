@@ -27,8 +27,12 @@ function purchases(arm: Arm, amounts: readonly number[], reversed: readonly numb
     grossMinor,
     refundedMinor: reversed.includes(index) ? grossMinor : 0,
     disputedMinor: 0,
-    occurredAt: `2026-10-18T${String(10 + index).padStart(2, "0")}:00:00.000Z`,
+    occurredAt: new Date(Date.parse("2026-10-18T10:00:00.000Z") + index * 10 * 60_000).toISOString(),
   }));
+}
+
+function repeat(amountMinor: number, count: number): number[] {
+  return Array.from({ length: count }, () => amountMinor);
 }
 
 const completeWindow = {
@@ -42,11 +46,39 @@ const completeWindow = {
 /** Demo evidence events that match the fixture's state: no closed window while running, one send on a partial launch. */
 function timeline(id: string, stage: "closed" | "running" | "partial" = "closed") {
   return [
-    { id: `${id}:planned`, source: "DRY_RUN" as const, occurredAt: "2026-10-17T08:30:00.000Z", label: "Plan locked", detail: "Audience frozen and split into two arms. Nothing was sent yet." },
+    {
+      id: `${id}:planned`,
+      source: "DRY_RUN" as const,
+      occurredAt: "2026-10-17T08:30:00.000Z",
+      label: "Plan locked",
+      detail: "Audience frozen and split into two arms. Nothing was sent yet.",
+    },
     stage === "partial"
-      ? { id: `${id}:seeded`, source: "DEMO" as const, occurredAt: "2026-10-17T09:00:00.000Z", label: "Only one message confirmed", detail: "Arm B’s send did not confirm, so the launch stopped for operator review." }
-      : { id: `${id}:seeded`, source: "DEMO" as const, occurredAt: "2026-10-17T09:00:00.000Z", label: "Both messages sent", detail: "Each arm received its own message at the same time." },
-    ...(stage === "closed" ? [{ id: `${id}:observed`, source: "DEMO" as const, occurredAt: "2026-10-19T10:00:00.000Z", label: "Observation window closed", detail: "Purchases, refunds and disputes were counted through the window." }] : []),
+      ? {
+          id: `${id}:seeded`,
+          source: "DEMO" as const,
+          occurredAt: "2026-10-17T09:00:00.000Z",
+          label: "Only one message confirmed",
+          detail: "Arm B’s send did not confirm, so the launch stopped for operator review.",
+        }
+      : {
+          id: `${id}:seeded`,
+          source: "DEMO" as const,
+          occurredAt: "2026-10-17T09:00:00.000Z",
+          label: "Both messages sent",
+          detail: "Each arm received its own message at the same time.",
+        },
+    ...(stage === "closed"
+      ? [
+          {
+            id: `${id}:observed`,
+            source: "DEMO" as const,
+            occurredAt: "2026-10-19T10:00:00.000Z",
+            label: "Observation window closed",
+            detail: "Purchases, refunds and disputes were counted through the window.",
+          },
+        ]
+      : []),
   ];
 }
 
@@ -55,15 +87,39 @@ const base = {
   audienceScope: "Fictional active subscribers",
   sourceAudienceUuid: "demo:audience:active-subscribers",
   variants: [
-    { arm: "A" as const, copy: "A new set is ready for you.", priceMinor: 1200, currency: "USD" as const, mediaUuid: "demo:media:afterglow" },
-    { arm: "B" as const, copy: "See 12 new afterglow portraits from this week’s shoot.", priceMinor: 1200, currency: "USD" as const, mediaUuid: "demo:media:afterglow" },
+    {
+      arm: "A" as const,
+      copy: "A new set is ready for you.",
+      priceMinor: 1200,
+      currency: "USD" as const,
+      mediaUuid: "demo:media:afterglow",
+    },
+    {
+      arm: "B" as const,
+      copy: "See 12 new afterglow portraits from this week’s shoot.",
+      priceMinor: 1200,
+      currency: "USD" as const,
+      mediaUuid: "demo:media:afterglow",
+    },
   ],
   comparison: { armALabel: "Generic preview", armBLabel: "Specific preview", currency: "USD" as const },
 };
 
 const priceVariants = [
-  { arm: "A" as const, copy: "A new set is ready for you.", priceMinor: 1200, currency: "USD" as const, mediaUuid: "demo:media:afterglow" },
-  { arm: "B" as const, copy: "A new set is ready for you.", priceMinor: 1500, currency: "USD" as const, mediaUuid: "demo:media:afterglow" },
+  {
+    arm: "A" as const,
+    copy: "A new set is ready for you.",
+    priceMinor: 1200,
+    currency: "USD" as const,
+    mediaUuid: "demo:media:afterglow",
+  },
+  {
+    arm: "B" as const,
+    copy: "A new set is ready for you.",
+    priceMinor: 1500,
+    currency: "USD" as const,
+    mediaUuid: "demo:media:afterglow",
+  },
 ] as const;
 
 const RAW_DEMO_RESULT_FIXTURES: readonly DemoResultFixture[] = [
@@ -74,20 +130,25 @@ const RAW_DEMO_RESULT_FIXTURES: readonly DemoResultFixture[] = [
     title: "Specific preview copy",
     variable: "COPY",
     state: "CLOSED",
-    assignments: assignments(12),
-    purchases: [...purchases("A", [1200, 1200]), ...purchases("B", [1200, 1200, 1200, 1200, 1200, 1200, 1200], [6])],
+    // Clear-cut: 10% vs 25% on 120 fans per arm sits far past the 95% bar, not on it.
+    assignments: assignments(120),
+    purchases: [...purchases("A", repeat(1200, 12)), ...purchases("B", repeat(1200, 31), [30])],
     observation: completeWindow,
     evidence: timeline("copy-complete"),
   },
   {
     ...base,
     id: "demo:result:price-complete",
-    experimentId: "demo:analysis:price-complete",
-    title: "Two PPV price points",
+    experimentId: "demo:experiment:price-complete",
+    title: "Raise PPV to $15",
     variable: "PRICE",
     state: "CLOSED",
-    assignments: assignments(12),
-    purchases: [...purchases("A", [1200, 1200, 1200, 1200]), ...purchases("B", [1500, 1500, 1500, 1500, 1500, 1500])],
+    sourceAudienceUuid: "demo:audience:recent-buyers",
+    audienceScope: "Fictional recent buyers",
+    // Clear-cut the other way: $15 lost buyers and earned about the same per recipient, so
+    // the honest answer is "no dependable difference", not a near-miss winner.
+    assignments: assignments(100),
+    purchases: [...purchases("A", repeat(1200, 20)), ...purchases("B", repeat(1500, 17))],
     observation: completeWindow,
     evidence: timeline("price-complete"),
     comparison: { armALabel: "$12 offer", armBLabel: "$15 offer", currency: "USD" },
@@ -178,6 +239,7 @@ const RAW_DEMO_RESULT_FIXTURES: readonly DemoResultFixture[] = [
 
 const dashboardExperimentIds = new Set([
   "demo:experiment:copy-complete",
+  "demo:experiment:price-complete",
   "demo:experiment:price-running",
   "demo:experiment:partial",
   "demo:experiment:invalid",
@@ -189,8 +251,14 @@ const dashboardExperimentIds = new Set([
  * subscribed and lapsed fans cannot appear in that list and are deliberately absent here too.
  */
 const seededRelationshipPattern = [
-  "active_renewing", "active_renewing", "active_not_renewing", "active_renewing",
-  "trialing", "active_renewing", "active_not_renewing", "active_renewing",
+  "active_renewing",
+  "active_renewing",
+  "active_not_renewing",
+  "active_renewing",
+  "trialing",
+  "active_renewing",
+  "active_not_renewing",
+  "active_renewing",
 ] as const;
 const day = 86_400_000;
 
@@ -217,8 +285,8 @@ function enrichAudience(fixture: DemoResultFixture): DemoResultFixture {
       payloadHash: `seed:payment:${purchase.id}`,
       receivedAt: purchase.occurredAt,
     };
-    const reversalType = purchase.refundedMinor > 0 ? "REFUND" as const
-      : purchase.disputedMinor > 0 ? "DISPUTE" as const : null;
+    const reversalType =
+      purchase.refundedMinor > 0 ? ("REFUND" as const) : purchase.disputedMinor > 0 ? ("DISPUTE" as const) : null;
     if (!reversalType) return [payment];
     const reversal: CommerceEventRecord = {
       source: "SEEDED_FIXTURE",
@@ -267,13 +335,18 @@ function enrichAudience(fixture: DemoResultFixture): DemoResultFixture {
   });
   const audienceEvidence = frozenAudience.map((row): AudienceMemberEvidence => {
     const attributed = projectedPurchases.filter((purchase) => purchase.fanUuid === row.fanUuid);
-    const settled = attributed.filter((purchase) => purchase.grossMinor - purchase.refundedMinor - purchase.disputedMinor > 0);
+    const settled = attributed.filter(
+      (purchase) => purchase.grossMinor - purchase.refundedMinor - purchase.disputedMinor > 0,
+    );
     return memberEvidenceFromRow(row, "DEMO", {
       converted: settled.length > 0,
       grossPurchaseCount: attributed.length,
       settledPurchaseCount: settled.length,
       grossRevenueMinor: attributed.reduce((total, purchase) => total + purchase.grossMinor, 0),
-      settledRevenueMinor: settled.reduce((total, purchase) => total + purchase.grossMinor - purchase.refundedMinor - purchase.disputedMinor, 0),
+      settledRevenueMinor: settled.reduce(
+        (total, purchase) => total + purchase.grossMinor - purchase.refundedMinor - purchase.disputedMinor,
+        0,
+      ),
       fullyRefunded: attributed.some((purchase) => purchase.refundedMinor === purchase.grossMinor),
       disputed: attributed.some((purchase) => purchase.disputedMinor > 0),
       lastOutcomeAt: attributed.at(-1)?.occurredAt,

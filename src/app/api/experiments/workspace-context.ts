@@ -19,12 +19,19 @@ export async function experimentRequestContext(body: { experimentId?: unknown; w
   if (typeof body.experimentId !== "string" || !body.experimentId.trim()) {
     return { error: jsonError(400, "experiment_required", "An experiment ID is required.") };
   }
-  const workspace = body.workspace === "real" ? "real" as const : body.workspace === "demo" ? "demo" as const : null;
+  const workspace =
+    body.workspace === "real" ? ("real" as const) : body.workspace === "demo" ? ("demo" as const) : null;
   if (!workspace) return { error: jsonError(400, "workspace_required", "Choose the real or seeded workspace.") };
-  if (workspace === "demo" && !canUseDemoWorkspace(
-    session.userUuid, process.env.PERFORM_DEMO_CREATOR_UUIDS,
-    session.handle, process.env.PERFORM_DEMO_CREATOR_HANDLES,
-  )) return { error: jsonError(403, "demo_forbidden", "This creator is not authorised for the seeded workspace.") };
+  if (
+    workspace === "demo" &&
+    !canUseDemoWorkspace(
+      session.userUuid,
+      process.env.PERFORM_DEMO_CREATOR_UUIDS,
+      session.handle,
+      process.env.PERFORM_DEMO_CREATOR_HANDLES,
+    )
+  )
+    return { error: jsonError(403, "demo_forbidden", "This creator is not authorised for the seeded workspace.") };
   const { env } = await getCloudflareContext({ async: true });
   const binding = workspace === "real" ? env.PERFORM_REAL_DB : env.PERFORM_DEMO_DB;
   if (!binding) return { error: jsonError(503, "database_not_configured", "The selected database is not configured.") };

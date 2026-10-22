@@ -9,7 +9,11 @@ const configured = {
   PERFORM_LIVE_CAPABILITIES: "audience_discovery,subscriber_state,purchase_enrichment",
   OAUTH_SCOPES: "read:self read:media read:chat read:fan read:insights",
 };
-const grantedSession = { userUuid: creatorUuid, isCreator: true, scope: "read:self read:media read:chat read:fan read:insights" };
+const grantedSession = {
+  userUuid: creatorUuid,
+  isCreator: true,
+  scope: "read:self read:media read:chat read:fan read:insights",
+};
 
 function harness(provenance: "REAL" | "DEMO" = "REAL") {
   const { sqlite, db } = createMigratedDatabase();
@@ -20,11 +24,20 @@ function harness(provenance: "REAL" | "DEMO" = "REAL") {
   }));
   const transport = vi.fn(fanvueTransport(sixFans));
   const transportFactory = vi.fn(() => transport);
-  const run = (overrides: Partial<Parameters<typeof runGuardedLiveAudienceCapture>[0]> = {}) => runGuardedLiveAudienceCapture({
-    session: grantedSession, env: configured, verified: [], activated: [], experimentId,
-    source: { kind: "SMART", uuid: sourceAudienceUuid }, repositories, transport: transportFactory,
-    now: () => capturedAt, commandId: "capture-1", ...overrides,
-  });
+  const run = (overrides: Partial<Parameters<typeof runGuardedLiveAudienceCapture>[0]> = {}) =>
+    runGuardedLiveAudienceCapture({
+      session: grantedSession,
+      env: configured,
+      verified: [],
+      activated: [],
+      experimentId,
+      source: { kind: "SMART", uuid: sourceAudienceUuid },
+      repositories,
+      transport: transportFactory,
+      now: () => capturedAt,
+      commandId: "capture-1",
+      ...overrides,
+    });
   return { sqlite, experimentId, repositories, transport, transportFactory, run };
 }
 
@@ -32,7 +45,9 @@ describe("guarded live audience capture", () => {
   it("refuses without a verified creator session before anything is opened", async () => {
     const h = harness();
     expect(await h.run({ session: null })).toEqual({ status: "REFUSED", reason: "NOT_A_VERIFIED_CREATOR" });
-    expect(await h.run({ session: { ...grantedSession, isCreator: false } })).toMatchObject({ reason: "NOT_A_VERIFIED_CREATOR" });
+    expect(await h.run({ session: { ...grantedSession, isCreator: false } })).toMatchObject({
+      reason: "NOT_A_VERIFIED_CREATOR",
+    });
     expect(h.repositories).not.toHaveBeenCalled();
     expect(h.transportFactory).not.toHaveBeenCalled();
   });
@@ -45,7 +60,12 @@ describe("guarded live audience capture", () => {
       { env: configured, expected: "connected" },
       { env: configured, verified: captureCapabilities, expected: "verified" },
       { env: configured, activated: captureCapabilities, expected: "connected" },
-      { env: configured, verified: captureCapabilities, activated: ["audience_discovery", "subscriber_state"] as const, expected: "verified" },
+      {
+        env: configured,
+        verified: captureCapabilities,
+        activated: ["audience_discovery", "subscriber_state"] as const,
+        expected: "verified",
+      },
     ];
     for (const { expected, ...rung } of rungs) {
       const result = await h.run(rung);
@@ -63,10 +83,12 @@ describe("guarded live audience capture", () => {
   it("refuses a demo experiment, another creator's experiment and a different source", async () => {
     expect(await harness("DEMO").run(active)).toMatchObject({ reason: "NOT_REAL_PROVENANCE" });
     const h = harness();
-    expect(await h.run({ ...active, session: { ...grantedSession, userUuid: "someone-else" } }))
-      .toMatchObject({ reason: "EXPERIMENT_NOT_FOUND" });
-    expect(await h.run({ ...active, source: { kind: "SMART", uuid: "auto_renewing" } }))
-      .toMatchObject({ reason: "SOURCE_AUDIENCE_MISMATCH" });
+    expect(await h.run({ ...active, session: { ...grantedSession, userUuid: "someone-else" } })).toMatchObject({
+      reason: "EXPERIMENT_NOT_FOUND",
+    });
+    expect(await h.run({ ...active, source: { kind: "SMART", uuid: "auto_renewing" } })).toMatchObject({
+      reason: "SOURCE_AUDIENCE_MISMATCH",
+    });
     expect(h.transportFactory).not.toHaveBeenCalled();
   });
 

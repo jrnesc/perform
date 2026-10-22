@@ -11,15 +11,16 @@ describe("live capability states", () => {
   });
 
   it("does not treat a flag as enough: required scopes must be configured", () => {
-    const report = deriveCapabilityStates({ env: { PERFORM_LIVE_CAPABILITIES: "audience_discovery", OAUTH_SCOPES: "read:chat" } });
+    const report = deriveCapabilityStates({
+      env: { PERFORM_LIVE_CAPABILITIES: "audience_discovery", OAUTH_SCOPES: "read:chat" },
+    });
     expect(report.audience_discovery).toMatchObject({ state: "fixture_backed", missingConfiguredScopes: ["read:fan"] });
   });
 
   it("needs the webhook signing secret for the commerce webhook", () => {
     const env = { PERFORM_LIVE_CAPABILITIES: "commerce_webhook", OAUTH_SCOPES: "read:creator" };
     expect(states({ env }).commerce_webhook).toBe("fixture_backed");
-    expect(states({ env: { ...env, FANVUE_WEBHOOK_SIGNING_SECRET: "s" } }).commerce_webhook)
-      .toBe("configured");
+    expect(states({ env: { ...env, FANVUE_WEBHOOK_SIGNING_SECRET: "s" } }).commerce_webhook).toBe("configured");
   });
 
   it("climbs the ladder one explicit rung at a time", () => {
@@ -31,7 +32,12 @@ describe("live capability states", () => {
     expect(at({ verified: ["earnings_reconciliation"] })).toBe("configured");
     expect(at({ grantedScopes: ["read:insights"], verified: ["earnings_reconciliation"] })).toBe("verified");
     expect(at({ grantedScopes: ["read:insights"], activated: ["earnings_reconciliation"] })).toBe("connected");
-    expect(at({ grantedScopes: ["read:insights"], verified: ["earnings_reconciliation"], activated: ["earnings_reconciliation"] }))
-      .toBe("active");
+    expect(
+      at({
+        grantedScopes: ["read:insights"],
+        verified: ["earnings_reconciliation"],
+        activated: ["earnings_reconciliation"],
+      }),
+    ).toBe("active");
   });
 });

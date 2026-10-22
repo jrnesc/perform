@@ -81,9 +81,9 @@ function pageOf(body: JsonObject, keys: readonly string[]): { rows: readonly unk
   const inner = Array.isArray(body.data) ? null : object(body.data ?? body);
   const rows = Array.isArray(body.data)
     ? body.data
-    : keys.map((key) => inner?.[key]).find((value) => Array.isArray(value)) ?? [];
-  const pagination = inner && typeof inner.pagination === "object" && inner.pagination
-    ? inner.pagination as JsonObject : {};
+    : (keys.map((key) => inner?.[key]).find((value) => Array.isArray(value)) ?? []);
+  const pagination =
+    inner && typeof inner.pagination === "object" && inner.pagination ? (inner.pagination as JsonObject) : {};
   const candidates = [body.nextCursor, inner?.nextCursor, pagination.nextCursor];
   const next = candidates.find((value): value is string => typeof value === "string" && value.length > 0);
   return { rows, next: next ?? null };
@@ -119,16 +119,22 @@ export function createFanvueWriteTransport(input: {
 
   return {
     async createCustomList(name) {
-      const body = object(await (await request("/v1/chats/lists/custom", {
-        method: "POST", body: JSON.stringify({ name }),
-      })).json());
+      const body = object(
+        await (
+          await request("/v1/chats/lists/custom", {
+            method: "POST",
+            body: JSON.stringify({ name }),
+          })
+        ).json(),
+      );
       return { uuid: requiredString(body.uuid ?? object(body.data ?? {}).uuid, "a custom-list UUID") };
     },
 
     async addCustomListMembers(listUuid, userUuids) {
       if (userUuids.length < 1 || userUuids.length > 100) throw new Error("Member batches must contain 1–100 UUIDs");
       await request(`/v1/chats/lists/custom/${encodeURIComponent(listUuid)}/members`, {
-        method: "POST", body: JSON.stringify({ userUuids }),
+        method: "POST",
+        body: JSON.stringify({ userUuids }),
       });
     },
 
@@ -138,11 +144,13 @@ export function createFanvueWriteTransport(input: {
       const seen = new Set<string>();
       do {
         const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-        const body = object(await (await request(`/v1/chats/lists/custom/${encodeURIComponent(listUuid)}${query}`)).json());
+        const body = object(
+          await (await request(`/v1/chats/lists/custom/${encodeURIComponent(listUuid)}${query}`)).json(),
+        );
         const { rows: page, next } = pageOf(body, ["members", "users"]);
         for (const item of page) {
           const row = object(item);
-          const user = typeof row.user === "object" && row.user ? row.user as JsonObject : {};
+          const user = typeof row.user === "object" && row.user ? (row.user as JsonObject) : {};
           members.push(requiredString(row.uuid ?? row.userUuid ?? user.uuid, "a member UUID"));
         }
         if (next && seen.has(next)) throw new FanvueWriteError("UNCERTAIN", null, "Fanvue repeated a list cursor");
@@ -157,11 +165,15 @@ export function createFanvueWriteTransport(input: {
     },
 
     async createMassMessage(payload, idempotencyKey) {
-      const body = object(await (await request("/v1/chats/mass-messages", {
-        method: "POST",
-        headers: { "Idempotency-Key": idempotencyKey },
-        body: JSON.stringify(payload),
-      })).json());
+      const body = object(
+        await (
+          await request("/v1/chats/mass-messages", {
+            method: "POST",
+            headers: { "Idempotency-Key": idempotencyKey },
+            body: JSON.stringify(payload),
+          })
+        ).json(),
+      );
       const data = object(body.data ?? body);
       return {
         uuid: requiredString(data.uuid ?? data.messageUuid, "a mass-message UUID"),
@@ -220,18 +232,31 @@ export function fixtureFanvueWriteTransport(): FanvueWriteTransport & { effects:
       if (!list) throw new FanvueWriteError("DEFINITE", 404, "Fixture list was not found");
       userUuids.forEach((uuid) => list.add(uuid));
     },
-    async listCustomListMembers(listUuid) { return [...(lists.get(listUuid) ?? [])]; },
-    async deleteCustomList(listUuid) { effects.push(`delete-list:${listUuid}`); lists.delete(listUuid); },
+    async listCustomListMembers(listUuid) {
+      return [...(lists.get(listUuid) ?? [])];
+    },
+    async deleteCustomList(listUuid) {
+      effects.push(`delete-list:${listUuid}`);
+      lists.delete(listUuid);
+    },
     async createMassMessage(payload, idempotencyKey) {
       const existing = messages.get(idempotencyKey);
       if (existing) return existing;
-      const message = { uuid: `fixture:message:${messages.size + 1}`, idempotencyKey, scheduledAt: payload.scheduledAt };
+      const message = {
+        uuid: `fixture:message:${messages.size + 1}`,
+        idempotencyKey,
+        scheduledAt: payload.scheduledAt,
+      };
       effects.push(`schedule-message:${idempotencyKey}`);
       messages.set(idempotencyKey, message);
       return message;
     },
-    async findMassMessageByIdempotencyKey(key) { return messages.get(key) ?? null; },
-    async cancelMassMessage(uuid) { effects.push(`cancel-message:${uuid}`); },
+    async findMassMessageByIdempotencyKey(key) {
+      return messages.get(key) ?? null;
+    },
+    async cancelMassMessage(uuid) {
+      effects.push(`cancel-message:${uuid}`);
+    },
   };
 }
 

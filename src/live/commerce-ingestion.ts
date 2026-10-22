@@ -1,7 +1,4 @@
-import {
-  sha256,
-  verifyAndParseCreatorEvidence,
-} from "../integrations/fanvue/creator-evidence";
+import { sha256, verifyAndParseCreatorEvidence } from "../integrations/fanvue/creator-evidence";
 import type { DeadLetterReason, LiveEvidenceRepository } from "../persistence/live-evidence";
 import { assignmentWindowStrategy, type PurchaseAttributionStrategy } from "./attribution";
 
@@ -51,8 +48,8 @@ export const unknownCreatorUuid = "unknown";
 
 function bestEffortCreatorUuid(rawBody: Uint8Array): string {
   try {
-    const uuid = (JSON.parse(new TextDecoder().decode(rawBody)) as { data?: { creator?: { uuid?: unknown } } })
-      .data?.creator?.uuid;
+    const uuid = (JSON.parse(new TextDecoder().decode(rawBody)) as { data?: { creator?: { uuid?: unknown } } }).data
+      ?.creator?.uuid;
     return typeof uuid === "string" && uuid.trim() ? uuid : unknownCreatorUuid;
   } catch {
     return unknownCreatorUuid;
@@ -97,7 +94,9 @@ export async function receiveCreatorCommerceWebhook(input: {
     nowMs: input.nowMs,
   });
 
-  const repository = input.repositoryFor(parsed.accepted ? parsed.event.creatorUuid : bestEffortCreatorUuid(input.rawBody));
+  const repository = input.repositoryFor(
+    parsed.accepted ? parsed.event.creatorUuid : bestEffortCreatorUuid(input.rawBody),
+  );
   const deadLetter = async (reason: DeadLetterReason, eventId: string | null, payloadHash: string, status: number) => {
     await repository.recordDeadLetter({ id: input.newId(), reason, eventId, payloadHash, receivedAt });
     return result(status, "DEAD_LETTERED");
@@ -110,23 +109,21 @@ export async function receiveCreatorCommerceWebhook(input: {
       if (parsed.reason === "UNSUPPORTED_EVENT") return result(200, "UNRELATED");
       // Authentic but unusable (unsupported shape, partial refund): acknowledge so
       // Fanvue stops retrying, and keep a hash-only audit trail.
-      return deadLetter(
-        parsed.reason, bestEffortEventId(input.rawBody), await sha256(input.rawBody), 200,
-      );
+      return deadLetter(parsed.reason, bestEffortEventId(input.rawBody), await sha256(input.rawBody), 200);
     }
     const { event, payloadHash } = parsed;
 
     if (event.kind === "PAYMENT") {
       const strategy = input.attribution ?? assignmentWindowStrategy;
       const decision = strategy.decide(
-        event, await repository.listAttributionCandidates(event.purchaserUuid, event.messageUuid),
+        event,
+        await repository.listAttributionCandidates(event.purchaserUuid, event.messageUuid),
       );
       if (decision.kind === "UNRELATED") return result(200, "UNRELATED");
       // Never guess between overlapping experiments; keep a hash-only record for the operator.
       if (decision.kind === "AMBIGUOUS") return deadLetter("ATTRIBUTION_AMBIGUOUS", event.eventId, payloadHash, 200);
       const context = await repository.getAttributionContext(decision.experimentId);
-      const confirmedMessageUuid = Object.entries(context.messages)
-        .find(([, arm]) => arm === decision.arm)?.[0];
+      const confirmedMessageUuid = Object.entries(context.messages).find(([, arm]) => arm === decision.arm)?.[0];
       if (confirmedMessageUuid) {
         await repository.recordAttributionProof({
           experimentId: decision.experimentId,
@@ -139,14 +136,24 @@ export async function receiveCreatorCommerceWebhook(input: {
       const outcome = await repository.recordCommerceEvent({
         source: "FANVUE_WEBHOOK",
         kind: "PAYMENT",
-        eventId: event.eventId, creatorUuid: event.creatorUuid, paymentId: event.paymentId,
-        purchaserUuid: event.purchaserUuid, messageUuid: event.messageUuid, messageType: event.messageType,
+        eventId: event.eventId,
+        creatorUuid: event.creatorUuid,
+        paymentId: event.paymentId,
+        purchaserUuid: event.purchaserUuid,
+        messageUuid: event.messageUuid,
+        messageType: event.messageType,
         attributionStrategy: strategy.id,
         // A missing assignment is stored against its message and excluded by projection.
-        messageMatched: decision.kind === "ATTRIBUTED" ? decision.messageMatched : decision.kind === "MISSING_ASSIGNMENT",
-        experimentId: decision.experimentId, arm: decision.arm,
-        grossMinor: event.grossMinor, netMinor: event.netMinor, currency: event.currency,
-        occurredAt: event.occurredAt, payloadHash, receivedAt,
+        messageMatched:
+          decision.kind === "ATTRIBUTED" ? decision.messageMatched : decision.kind === "MISSING_ASSIGNMENT",
+        experimentId: decision.experimentId,
+        arm: decision.arm,
+        grossMinor: event.grossMinor,
+        netMinor: event.netMinor,
+        currency: event.currency,
+        occurredAt: event.occurredAt,
+        payloadHash,
+        receivedAt,
       });
       return settle(outcome);
     }
@@ -154,10 +161,16 @@ export async function receiveCreatorCommerceWebhook(input: {
     const outcome = await repository.recordCommerceEvent({
       source: "FANVUE_WEBHOOK",
       kind: "REVERSAL",
-      eventId: event.eventId, creatorUuid: event.creatorUuid, paymentId: event.paymentId,
-      reversalId: event.reversalId, reversalType: event.reversalType,
-      amountMinor: event.amountMinor, currency: event.currency,
-      occurredAt: event.occurredAt, payloadHash, receivedAt,
+      eventId: event.eventId,
+      creatorUuid: event.creatorUuid,
+      paymentId: event.paymentId,
+      reversalId: event.reversalId,
+      reversalType: event.reversalType,
+      amountMinor: event.amountMinor,
+      currency: event.currency,
+      occurredAt: event.occurredAt,
+      payloadHash,
+      receivedAt,
     });
     return settle(outcome);
 

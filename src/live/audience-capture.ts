@@ -8,7 +8,11 @@ import {
 import { readAudienceSnapshot, type AudienceSource } from "../integrations/fanvue/audience-read";
 import { readFanEnrichment } from "../integrations/fanvue/fan-enrichment";
 import { LiveReadError, type FanvueReadTransport } from "../integrations/fanvue/live-read-contracts";
-import { deriveSubscriberCohort, readSubscriptionHistories, type SubscriberCohort } from "../integrations/fanvue/subscription-history";
+import {
+  deriveSubscriberCohort,
+  readSubscriptionHistories,
+  type SubscriberCohort,
+} from "../integrations/fanvue/subscription-history";
 import { assignmentChunkLimit } from "../persistence/d1-perform-repository";
 import type { PerformRepository } from "../persistence/contracts";
 import {
@@ -71,10 +75,16 @@ export async function captureLiveAudience(input: {
     const fanUuids = audience.members.map((member) => member.fanUuid);
 
     const purchases = await readFanEnrichment({
-      fanUuids, capturedAt: input.capturedAt, assignmentCutoff: input.assignmentCutoff, transport: input.transport,
+      fanUuids,
+      capturedAt: input.capturedAt,
+      assignmentCutoff: input.assignmentCutoff,
+      transport: input.transport,
     });
     const histories = await readSubscriptionHistories({
-      fanUuids, capturedAt: input.capturedAt, assignmentCutoff: input.assignmentCutoff, transport: input.transport,
+      fanUuids,
+      capturedAt: input.capturedAt,
+      assignmentCutoff: input.assignmentCutoff,
+      transport: input.transport,
     });
 
     const purchaseByFan = new Map(purchases.snapshots.map((row) => [row.fanUuid, row]));
@@ -85,12 +95,20 @@ export async function captureLiveAudience(input: {
     for (const fanUuid of fanUuids) {
       const purchase = purchaseByFan.get(fanUuid);
       const history = historyByFan.get(fanUuid);
-      if (!purchase) { reasons.push("PURCHASE_ENRICHMENT_FAILED"); failed.add(fanUuid); }
-      if (!history) { reasons.push("SUBSCRIPTION_HISTORY_FAILED"); failed.add(fanUuid); }
+      if (!purchase) {
+        reasons.push("PURCHASE_ENRICHMENT_FAILED");
+        failed.add(fanUuid);
+      }
+      if (!history) {
+        reasons.push("SUBSCRIPTION_HISTORY_FAILED");
+        failed.add(fanUuid);
+      }
       if (purchase && history) {
         const cohort = deriveSubscriberCohort(history, purchase);
-        if (cohort === "CONFLICT") { reasons.push("STATE_CONFLICT"); failed.add(fanUuid); }
-        else cohortByFan.set(fanUuid, cohort);
+        if (cohort === "CONFLICT") {
+          reasons.push("STATE_CONFLICT");
+          failed.add(fanUuid);
+        } else cohortByFan.set(fanUuid, cohort);
       }
     }
     if (reasons.length > 0) return incomplete(reasons, [...failed]);
@@ -105,25 +123,36 @@ export async function captureLiveAudience(input: {
       const purchase = purchaseByFan.get(fanUuid)!;
       const history = historyByFan.get(fanUuid)!;
       return {
-        experimentId: input.experimentId, fanUuid, arm: armByFan.get(fanUuid)!,
-        version: audienceEvidenceRowVersion, capturedAt: input.capturedAt,
+        experimentId: input.experimentId,
+        fanUuid,
+        arm: armByFan.get(fanUuid)!,
+        version: audienceEvidenceRowVersion,
+        capturedAt: input.capturedAt,
         subscriberCohort: cohortByFan.get(fanUuid)!,
         earliestSubscriptionAt: history.earliestSubscriptionAt,
-        validPeriodCount: history.validPeriodCount, hasTrial: history.hasTrial,
+        validPeriodCount: history.validPeriodCount,
+        hasTrial: history.hasTrial,
         resubscribedAfterLapse: history.resubscribedAfterLapse,
-        autoRenewalEnabled: purchase.autoRenewalEnabled, renewsAt: purchase.renewsAt,
+        autoRenewalEnabled: purchase.autoRenewalEnabled,
+        renewsAt: purchase.renewsAt,
         priorSettledPurchaseCount: purchase.priorSettledPurchaseCount,
         priorSettledSpendMinor: purchase.priorSettledSpendMinor,
       };
     });
     return {
-      status: "READY", assignments, evidence, armCounts, capturedAt: input.capturedAt,
+      status: "READY",
+      assignments,
+      evidence,
+      armCounts,
+      capturedAt: input.capturedAt,
       snapshotHash: await hashAudienceSnapshot(members),
     };
   } catch (error) {
     if (error instanceof LiveReadError) {
       return {
-        status: "INCOMPLETE", reasons: ["READ_ABORTED"], failedFanUuids: [],
+        status: "INCOMPLETE",
+        reasons: ["READ_ABORTED"],
+        failedFanUuids: [],
         abort: { code: error.code, retryAfterSeconds: error.retryAfterSeconds },
       };
     }

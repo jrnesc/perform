@@ -29,17 +29,23 @@ export async function GET(request: Request) {
   const workspace = new URL(request.url).searchParams.get("workspace") === "demo" ? "demo" : "real";
   if (workspace === "real") {
     const { env } = await getCloudflareContext({ async: true });
-    const deferred = () => error(
-      409,
-      "live_audience_deferred",
-      "Live audience capture is not active for this creator yet. It needs read:chat and read:fan consent plus a verified, activated read path; use the labelled demo workspace meanwhile.",
-      demoAvailable,
-    );
+    const deferred = () =>
+      error(
+        409,
+        "live_audience_deferred",
+        "Live audience capture is not active for this creator yet. It needs read:chat and read:fan consent plus a verified, activated read path; use the labelled demo workspace meanwhile.",
+        demoAvailable,
+      );
     if (!env.PERFORM_REAL_DB) return deferred();
-    const records = await new D1CapabilityRecordReader(env.PERFORM_REAL_DB as unknown as SqlDatabase, session.userUuid).snapshot();
+    const records = await new D1CapabilityRecordReader(
+      env.PERFORM_REAL_DB as unknown as SqlDatabase,
+      session.userUuid,
+    ).snapshot();
     const capabilities = deriveCapabilityStates({
-      env: process.env, grantedScopes: (session.scope ?? "").split(/\s+/).filter(Boolean),
-      verified: records.verified, activated: records.activated,
+      env: process.env,
+      grantedScopes: (session.scope ?? "").split(/\s+/).filter(Boolean),
+      verified: records.verified,
+      activated: records.activated,
     });
     if (captureCapabilities.some((id) => capabilities[id].state !== "active")) return deferred();
     // The members are read and frozen when the experiment is prepared, not on page load.
@@ -47,13 +53,19 @@ export async function GET(request: Request) {
       workspace: "real",
       creator: { uuid: session.userUuid, displayName: session.displayName },
       capabilities: { demoAvailable },
-      audiences: [{
-        id: "subscribers", name: "Active subscribers",
-        description: "Every contactable subscriber is read from Fanvue and frozen when you review the experiment.",
-        sourceKind: "FANVUE_SMART_LIST", capturedAt: new Date().toISOString(),
-        members: [], sourceCount: 0, exclusions: [],
-        provenance: { kind: "FANVUE", label: "Live Fanvue audience" },
-      }],
+      audiences: [
+        {
+          id: "subscribers",
+          name: "Active subscribers",
+          description: "Every contactable subscriber is read from Fanvue and frozen when you review the experiment.",
+          sourceKind: "FANVUE_SMART_LIST",
+          capturedAt: new Date().toISOString(),
+          members: [],
+          sourceCount: 0,
+          exclusions: [],
+          provenance: { kind: "FANVUE", label: "Live Fanvue audience" },
+        },
+      ],
     });
   }
   if (!demoAvailable) {

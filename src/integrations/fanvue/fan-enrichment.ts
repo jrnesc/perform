@@ -8,7 +8,13 @@ import {
 } from "./live-read-contracts";
 
 const fanPaymentSources = new Set([
-  "subscription", "renewal", "message", "post", "tip", "checkoutLink", "mediaLink",
+  "subscription",
+  "renewal",
+  "message",
+  "post",
+  "tip",
+  "checkoutLink",
+  "mediaLink",
   "fanExperience",
 ]);
 
@@ -45,8 +51,13 @@ function parseFan(fanUuid: string, value: unknown, capturedAt: string): FrozenFa
   const spending = record(item?.spending);
   const sources = record(spending?.sources);
   const subscription = record(item?.subscription);
-  if (!item || !sources || !subscription ||
-      !["subscriber", "expired", "follower", "not_contactable"].includes(status ?? "")) return null;
+  if (
+    !item ||
+    !sources ||
+    !subscription ||
+    !["subscriber", "expired", "follower", "not_contactable"].includes(status ?? "")
+  )
+    return null;
 
   let priorSettledPurchaseCount = 0;
   let priorSettledSpendMinor = 0;
@@ -65,10 +76,13 @@ function parseFan(fanUuid: string, value: unknown, capturedAt: string): FrozenFa
   if (created !== null && (!subscriptionCreatedAt || Number.isNaN(Date.parse(subscriptionCreatedAt)))) {
     return null;
   }
-  const renewsAt = subscription.renewsAt === null || subscription.renewsAt === undefined
-    ? null : string(subscription.renewsAt);
-  if (typeof subscription.autoRenewalEnabled !== "boolean" ||
-      (subscription.renewsAt != null && (!renewsAt || Number.isNaN(Date.parse(renewsAt))))) return null;
+  const renewsAt =
+    subscription.renewsAt === null || subscription.renewsAt === undefined ? null : string(subscription.renewsAt);
+  if (
+    typeof subscription.autoRenewalEnabled !== "boolean" ||
+    (subscription.renewsAt != null && (!renewsAt || Number.isNaN(Date.parse(renewsAt))))
+  )
+    return null;
   return {
     fanUuid,
     capturedAt,
@@ -102,11 +116,15 @@ export async function readFanEnrichment(input: {
   const errors: Record<string, "forbidden" | "not_found" | "internal" | "malformed"> = {};
   const batches = chunks(unique, 100);
   for (const batch of batches) {
-    const body = record(await json(await input.transport("/v1/insights/fans/batch", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ userUuids: batch }),
-    })));
+    const body = record(
+      await json(
+        await input.transport("/v1/insights/fans/batch", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ userUuids: batch }),
+        }),
+      ),
+    );
     if (!body) throw new LiveReadError("INVALID_RESPONSE", "Fanvue returned an invalid fan-insights batch.");
     for (const fanUuid of batch) {
       const value = body[fanUuid];

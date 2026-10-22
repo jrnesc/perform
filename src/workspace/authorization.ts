@@ -26,9 +26,7 @@ export function canUseDemoWorkspace(
 ): boolean {
   if (demoCreatorAllowlist(rawUuidAllowlist).has(creatorUuid)) return true;
   if (!creatorHandle) return false;
-  return demoCreatorHandleAllowlist(rawHandleAllowlist).has(
-    creatorHandle.trim().replace(/^@/, "").toLowerCase(),
-  );
+  return demoCreatorHandleAllowlist(rawHandleAllowlist).has(creatorHandle.trim().replace(/^@/, "").toLowerCase());
 }
 
 export class DemoCapabilityDeniedError extends Error {

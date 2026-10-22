@@ -66,9 +66,9 @@ describe("experiment variant invariants", () => {
   });
 
   it("rejects changing copy and price together", () => {
-    expect(() =>
-      validateVariants("COPY", [copyVariants[0], { ...copyVariants[1], priceMinor: 1200 }]),
-    ).toThrow(/keep price unchanged/);
+    expect(() => validateVariants("COPY", [copyVariants[0], { ...copyVariants[1], priceMinor: 1200 }])).toThrow(
+      /keep price unchanged/,
+    );
   });
 });
 
@@ -113,9 +113,7 @@ describe("experiment state machine", () => {
   it("never treats a one-sided send as a running or valid result", () => {
     const partial = [confirmedIntents[0], { ...pendingIntents[1], status: "UNKNOWN" }] as const;
     expect(() => transition("SENDING", "RUNNING", { sendIntents: partial })).toThrow();
-    expect(transition("SENDING", "PARTIAL_LAUNCH", { sendIntents: partial })).toBe(
-      "PARTIAL_LAUNCH",
-    );
+    expect(transition("SENDING", "PARTIAL_LAUNCH", { sendIntents: partial })).toBe("PARTIAL_LAUNCH");
     expect(() => transition("PARTIAL_LAUNCH", "CLOSED")).toThrow();
   });
 

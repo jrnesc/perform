@@ -24,8 +24,11 @@ export async function discardExperiment(input: {
     throw new Error("Only an experiment that has not been launched can be discarded");
   }
   await input.repository.transitionExperiment({
-    commandId: `${experiment.id}:discarded`, experimentId: experiment.id, to: "INVALID",
-    occurredAt: input.now(), evidence: { invalidReason: discardedReason },
+    commandId: `${experiment.id}:discarded`,
+    experimentId: experiment.id,
+    to: "INVALID",
+    occurredAt: input.now(),
+    evidence: { invalidReason: discardedReason },
   });
 }
 
@@ -35,11 +38,14 @@ export function liveSubscribersAudience(
   capturedAt: string,
 ): AudienceSnapshot {
   return {
-    id: "subscribers", name: "Active subscribers",
+    id: "subscribers",
+    name: "Active subscribers",
     description: "Contactable subscribers read from Fanvue and frozen before launch.",
-    sourceKind: "FANVUE_SMART_LIST", capturedAt,
+    sourceKind: "FANVUE_SMART_LIST",
+    capturedAt,
     members: assignments.map(({ fanUuid, stratum }) => ({ fanUuid, stratum })),
-    sourceCount: assignments.length, exclusions: [],
+    sourceCount: assignments.length,
+    exclusions: [],
     provenance: { kind: "FANVUE", label: "Live Fanvue audience" },
   };
 }
@@ -63,11 +69,17 @@ export async function rebuildSavedReview(input: {
     throw new Error("The saved variants do not use this asset");
   }
   const review = await buildExperimentReview({
-    id: experiment.id, name: experiment.name, audience: input.audience, asset: input.asset,
-    variable: experiment.variable, hypothesis: experiment.hypothesis, variants: input.variants,
+    id: experiment.id,
+    name: experiment.name,
+    audience: input.audience,
+    asset: input.asset,
+    variable: experiment.variable,
+    hypothesis: experiment.hypothesis,
+    variants: input.variants,
   });
   const stored = new Map(input.assignments.map(({ fanUuid, arm }) => [fanUuid, arm]));
-  const sameSplit = review.assignments.length === stored.size &&
+  const sameSplit =
+    review.assignments.length === stored.size &&
     review.assignments.every(({ fanUuid, arm }) => stored.get(fanUuid) === arm);
   if (!sameSplit || review.snapshotHash !== experiment.snapshotHash) {
     throw new Error("The saved audience split could not be reproduced; start a new experiment");

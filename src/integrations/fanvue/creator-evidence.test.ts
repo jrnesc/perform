@@ -1,10 +1,6 @@
 import { signWebhookFixture } from "@fanvue/builder-sdk";
 import { describe, expect, it } from "vitest";
-import {
-  CreatorEvidenceProjector,
-  verifyAndParseCreatorEvidence,
-  type CreatorEvidenceEvent,
-} from "./creator-evidence";
+import { CreatorEvidenceProjector, verifyAndParseCreatorEvidence, type CreatorEvidenceEvent } from "./creator-evidence";
 import { buildDemoIntegrationContractProof } from "../../demo/integration-contract-proof";
 
 const signingSecret = "fixture-signing-secret";
@@ -41,11 +37,17 @@ function paymentBody(overrides: Record<string, unknown> = {}) {
 
 async function signed(body: Record<string, unknown>, signedAt = timestampSeconds) {
   const rawBody = new TextEncoder().encode(JSON.stringify(body));
-  const { value: signature } = await signWebhookFixture({ payload: rawBody, signingSecret, timestampSeconds: signedAt });
+  const { value: signature } = await signWebhookFixture({
+    payload: rawBody,
+    signingSecret,
+    timestampSeconds: signedAt,
+  });
   return { rawBody, signature };
 }
 
-function payment(overrides: Partial<Extract<CreatorEvidenceEvent, { kind: "PAYMENT" }>> = {}): Extract<CreatorEvidenceEvent, { kind: "PAYMENT" }> {
+function payment(
+  overrides: Partial<Extract<CreatorEvidenceEvent, { kind: "PAYMENT" }>> = {},
+): Extract<CreatorEvidenceEvent, { kind: "PAYMENT" }> {
   return {
     kind: "PAYMENT",
     eventId: "event-payment-1",
@@ -62,7 +64,9 @@ function payment(overrides: Partial<Extract<CreatorEvidenceEvent, { kind: "PAYME
   };
 }
 
-function reversal(overrides: Partial<Extract<CreatorEvidenceEvent, { kind: "REVERSAL" }>> = {}): Extract<CreatorEvidenceEvent, { kind: "REVERSAL" }> {
+function reversal(
+  overrides: Partial<Extract<CreatorEvidenceEvent, { kind: "REVERSAL" }>> = {},
+): Extract<CreatorEvidenceEvent, { kind: "REVERSAL" }> {
   return {
     kind: "REVERSAL",
     eventId: "event-reversal-1",
@@ -102,31 +106,37 @@ describe("Fanvue creator evidence contract", () => {
     expect(JSON.stringify(result.event)).not.toContain("must-not-persist");
 
     const reserialized = new TextEncoder().encode(JSON.stringify(body, null, 2));
-    await expect(verifyAndParseCreatorEvidence({
-      rawBody: reserialized,
-      signature: fixture.signature,
-      signingSecret,
-      expectedCreatorUuid: creatorUuid,
-      nowMs: timestampSeconds * 1000,
-    })).resolves.toEqual({ accepted: false, reason: "INVALID_SIGNATURE" });
+    await expect(
+      verifyAndParseCreatorEvidence({
+        rawBody: reserialized,
+        signature: fixture.signature,
+        signingSecret,
+        expectedCreatorUuid: creatorUuid,
+        nowMs: timestampSeconds * 1000,
+      }),
+    ).resolves.toEqual({ accepted: false, reason: "INVALID_SIGNATURE" });
   });
 
   it("rejects stale signatures and a creator mismatch", async () => {
     const fixture = await signed(paymentBody());
-    await expect(verifyAndParseCreatorEvidence({
-      rawBody: fixture.rawBody,
-      signature: fixture.signature,
-      signingSecret,
-      expectedCreatorUuid: creatorUuid,
-      nowMs: (timestampSeconds + 301) * 1000,
-    })).resolves.toEqual({ accepted: false, reason: "INVALID_SIGNATURE" });
-    await expect(verifyAndParseCreatorEvidence({
-      rawBody: fixture.rawBody,
-      signature: fixture.signature,
-      signingSecret,
-      expectedCreatorUuid: "another-creator",
-      nowMs: timestampSeconds * 1000,
-    })).resolves.toEqual({ accepted: false, reason: "WRONG_CREATOR" });
+    await expect(
+      verifyAndParseCreatorEvidence({
+        rawBody: fixture.rawBody,
+        signature: fixture.signature,
+        signingSecret,
+        expectedCreatorUuid: creatorUuid,
+        nowMs: (timestampSeconds + 301) * 1000,
+      }),
+    ).resolves.toEqual({ accepted: false, reason: "INVALID_SIGNATURE" });
+    await expect(
+      verifyAndParseCreatorEvidence({
+        rawBody: fixture.rawBody,
+        signature: fixture.signature,
+        signingSecret,
+        expectedCreatorUuid: "another-creator",
+        nowMs: timestampSeconds * 1000,
+      }),
+    ).resolves.toEqual({ accepted: false, reason: "WRONG_CREATOR" });
   });
 
   it("parses a signed formal dispute and ignores an early warning shape", async () => {
@@ -147,30 +157,46 @@ describe("Fanvue creator evidence contract", () => {
       },
     };
     const fixture = await signed(formal);
-    await expect(verifyAndParseCreatorEvidence({
-      rawBody: fixture.rawBody,
-      signature: fixture.signature,
-      signingSecret,
-      expectedCreatorUuid: creatorUuid,
-      nowMs: timestampSeconds * 1000,
-    })).resolves.toMatchObject({ accepted: true, event: { kind: "REVERSAL", reversalType: "DISPUTE", paymentId: "invoice-1" } });
+    await expect(
+      verifyAndParseCreatorEvidence({
+        rawBody: fixture.rawBody,
+        signature: fixture.signature,
+        signingSecret,
+        expectedCreatorUuid: creatorUuid,
+        nowMs: timestampSeconds * 1000,
+      }),
+    ).resolves.toMatchObject({
+      accepted: true,
+      event: { kind: "REVERSAL", reversalType: "DISPUTE", paymentId: "invoice-1" },
+    });
 
-    const warning = await signed({ ...formal, type: "creator.dispute.flagged", data: { ...formal.data, status: "warning" } });
-    await expect(verifyAndParseCreatorEvidence({
-      rawBody: warning.rawBody,
-      signature: warning.signature,
-      signingSecret,
-      expectedCreatorUuid: creatorUuid,
-      nowMs: timestampSeconds * 1000,
-    })).resolves.toEqual({ accepted: false, reason: "UNSUPPORTED_EVENT" });
+    const warning = await signed({
+      ...formal,
+      type: "creator.dispute.flagged",
+      data: { ...formal.data, status: "warning" },
+    });
+    await expect(
+      verifyAndParseCreatorEvidence({
+        rawBody: warning.rawBody,
+        signature: warning.signature,
+        signingSecret,
+        expectedCreatorUuid: creatorUuid,
+        nowMs: timestampSeconds * 1000,
+      }),
+    ).resolves.toEqual({ accepted: false, reason: "UNSUPPORTED_EVENT" });
   });
 
   it("accepts a payment whose currency is null, as the documentation allows", async () => {
     const fixture = await signed(paymentBody({ currency: null }));
-    await expect(verifyAndParseCreatorEvidence({
-      rawBody: fixture.rawBody, signature: fixture.signature, signingSecret,
-      expectedCreatorUuid: creatorUuid, nowMs: timestampSeconds * 1000,
-    })).resolves.toMatchObject({ accepted: true, event: { kind: "PAYMENT", currency: null, grossMinor: 1200 } });
+    await expect(
+      verifyAndParseCreatorEvidence({
+        rawBody: fixture.rawBody,
+        signature: fixture.signature,
+        signingSecret,
+        expectedCreatorUuid: creatorUuid,
+        nowMs: timestampSeconds * 1000,
+      }),
+    ).resolves.toMatchObject({ accepted: true, event: { kind: "PAYMENT", currency: null, grossMinor: 1200 } });
   });
 
   it("fails closed on a partial-refund shape outside the supported Fanvue contract", async () => {
@@ -189,13 +215,15 @@ describe("Fanvue creator evidence contract", () => {
         creator: { uuid: creatorUuid },
       },
     });
-    await expect(verifyAndParseCreatorEvidence({
-      rawBody: fixture.rawBody,
-      signature: fixture.signature,
-      signingSecret,
-      expectedCreatorUuid: creatorUuid,
-      nowMs: timestampSeconds * 1000,
-    })).resolves.toEqual({ accepted: false, reason: "INVALID_PAYLOAD" });
+    await expect(
+      verifyAndParseCreatorEvidence({
+        rawBody: fixture.rawBody,
+        signature: fixture.signature,
+        signingSecret,
+        expectedCreatorUuid: creatorUuid,
+        nowMs: timestampSeconds * 1000,
+      }),
+    ).resolves.toEqual({ accepted: false, reason: "INVALID_PAYLOAD" });
   });
 
   it("deduplicates retries and refuses event IDs reused with different content", () => {
@@ -209,7 +237,9 @@ describe("Fanvue creator evidence contract", () => {
   it("ignores purchases outside the known message and frozen assignment boundary", () => {
     const evidence = projector();
     expect(evidence.ingest(payment({ messageUuid: "unknown-message" }), "hash-unknown")).toBe("IGNORED");
-    expect(evidence.ingest(payment({ eventId: "event-payment-2", purchaserUuid: "fan-b" }), "hash-wrong-arm")).toBe("IGNORED");
+    expect(evidence.ingest(payment({ eventId: "event-payment-2", purchaserUuid: "fan-b" }), "hash-wrong-arm")).toBe(
+      "IGNORED",
+    );
     expect(evidence.snapshot()).toMatchObject({ purchases: { A: 0, B: 0 }, ignoredEvents: 2 });
   });
 
@@ -219,7 +249,12 @@ describe("Fanvue creator evidence contract", () => {
       evidence.ingest(reversal({ reversalType }), `hash-${reversalType}`);
       expect(evidence.snapshot()).toMatchObject({ pendingReversals: 1, settledPurchases: { A: 0, B: 0 } });
       evidence.ingest(payment(), "hash-payment");
-      expect(evidence.snapshot()).toMatchObject({ purchases: { A: 1, B: 0 }, settledPurchases: { A: 0, B: 0 }, settledMinor: { A: 0, B: 0 }, pendingReversals: 0 });
+      expect(evidence.snapshot()).toMatchObject({
+        purchases: { A: 1, B: 0 },
+        settledPurchases: { A: 0, B: 0 },
+        settledMinor: { A: 0, B: 0 },
+        pendingReversals: 0,
+      });
     }
   });
 

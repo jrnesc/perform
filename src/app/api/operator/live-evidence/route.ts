@@ -23,7 +23,8 @@ export async function GET() {
   if (!sessionSecret) return jsonError(503, "not_configured", "Perform is not configured.");
   const session = await getSession(sessionSecret);
   if (!session?.isCreator) return jsonError(401, "disconnected", "Open Perform from Fanvue to reconnect.");
-  if (session.userUuid !== liveCreatorUuid) return jsonError(403, "operator_forbidden", "This creator is not the live operator.");
+  if (session.userUuid !== liveCreatorUuid)
+    return jsonError(403, "operator_forbidden", "This creator is not the live operator.");
 
   const { env } = await getCloudflareContext({ async: true });
   if (!env.PERFORM_REAL_DB) return jsonError(503, "database_not_configured", "The real database is not configured.");

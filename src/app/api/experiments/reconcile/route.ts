@@ -16,11 +16,11 @@ export const runtime = "nodejs";
  * Fanvue; appends one snapshot covering delivery to the observation end (or now).
  */
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { experimentId?: unknown; workspace?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { experimentId?: unknown; workspace?: unknown };
   const resolved = await experimentRequestContext(body);
   if ("error" in resolved) return resolved.error;
   const { session, db, experimentId } = resolved;
-  const provenance = resolved.workspace === "real" ? "REAL" as const : "DEMO" as const;
+  const provenance = resolved.workspace === "real" ? ("REAL" as const) : ("DEMO" as const);
   const repositories = {
     repository: new D1PerformRepository(db, session.userUuid, provenance),
     launchRepository: new D1LaunchRepository(db, session.userUuid, experimentId),
@@ -31,26 +31,38 @@ export async function POST(request: Request) {
   try {
     let record;
     if (provenance === "DEMO") {
-      if (!await repositories.repository.getExperiment(experimentId)) {
+      if (!(await repositories.repository.getExperiment(experimentId))) {
         return jsonError(404, "experiment_not_found", "That experiment is not in this workspace.");
       }
       const context = await repositories.evidenceRepository.getAttributionContext(experimentId);
       record = await reconcileObservation({
-        experimentId, creatorUuid: session.userUuid, ...repositories,
-        transport: fixtureReconciliationReadTransport(Object.keys(context.messages)), now, newId,
+        experimentId,
+        creatorUuid: session.userUuid,
+        ...repositories,
+        transport: fixtureReconciliationReadTransport(Object.keys(context.messages)),
+        now,
+        newId,
       });
     } else {
       const records = await new D1CapabilityRecordReader(db, session.userUuid).snapshot();
       const outcome = await runGuardedReconciliation({
         session: { userUuid: session.userUuid, isCreator: session.isCreator, scope: session.scope },
-        env: process.env, records, experimentId,
+        env: process.env,
+        records,
+        experimentId,
         repositories: async () => repositories,
-        transport: () => createFanvueReadTransport({ accessToken: session.accessToken, coordinationKey: session.userUuid }),
-        now, newId,
+        transport: () =>
+          createFanvueReadTransport({ accessToken: session.accessToken, coordinationKey: session.userUuid }),
+        now,
+        newId,
       });
       if (outcome.status === "REFUSED") {
-        return jsonError(outcome.reason === "EXPERIMENT_NOT_FOUND" ? 404 : 409, outcome.reason.toLowerCase(),
-          "Reconciling this real experiment is not enabled.", { capabilities: outcome.capabilities ?? null });
+        return jsonError(
+          outcome.reason === "EXPERIMENT_NOT_FOUND" ? 404 : 409,
+          outcome.reason.toLowerCase(),
+          "Reconciling this real experiment is not enabled.",
+          { capabilities: outcome.capabilities ?? null },
+        );
       }
       record = outcome.record;
     }

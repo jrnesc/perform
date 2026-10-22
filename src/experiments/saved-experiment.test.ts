@@ -19,24 +19,45 @@ async function savedExperiment() {
   const { sqlite, db } = createMigratedDatabase();
   const repository = new D1PerformRepository(db, "creator-1", "DEMO");
   const review = await buildExperimentReview({
-    id: "experiment-1", name: "Saved test", audience, asset, variable: "COPY",
-    hypothesis: "Specific copy wins", variants,
+    id: "experiment-1",
+    name: "Saved test",
+    audience,
+    asset,
+    variable: "COPY",
+    hypothesis: "Specific copy wins",
+    variants,
   });
   await repository.createExperiment({
-    id: review.experimentId, name: review.draft.name, variable: "COPY", hypothesis: review.draft.hypothesis,
-    sourceAudienceUuid: audience.id, variants, createdAt: now,
+    id: review.experimentId,
+    name: review.draft.name,
+    variable: "COPY",
+    hypothesis: review.draft.hypothesis,
+    sourceAudienceUuid: audience.id,
+    variants,
+    createdAt: now,
   });
   await repository.transitionExperiment({
-    commandId: "start", experimentId: review.experimentId, to: "SNAPSHOTTING",
-    evidence: { variable: "COPY", variants }, occurredAt: now,
+    commandId: "start",
+    experimentId: review.experimentId,
+    to: "SNAPSHOTTING",
+    evidence: { variable: "COPY", variants },
+    occurredAt: now,
   });
   for (let index = 0; index < review.assignments.length; index += assignmentChunkLimit) {
-    await repository.saveAssignmentChunk(review.experimentId, review.assignments.slice(index, index + assignmentChunkLimit), now);
+    await repository.saveAssignmentChunk(
+      review.experimentId,
+      review.assignments.slice(index, index + assignmentChunkLimit),
+      now,
+    );
   }
   await repository.finalizeAllocation({
-    commandId: "finalize", experimentId: review.experimentId, snapshotHash: review.snapshotHash,
-    snapshotCount: review.eligibleCount, armCounts: review.armCounts,
-    algorithmVersion: review.assignments[0].algorithmVersion, snapshotAt: now,
+    commandId: "finalize",
+    experimentId: review.experimentId,
+    snapshotHash: review.snapshotHash,
+    snapshotCount: review.eligibleCount,
+    armCounts: review.armCounts,
+    algorithmVersion: review.assignments[0].algorithmVersion,
+    snapshotAt: now,
   });
   return { sqlite, db, repository, review };
 }
@@ -44,8 +65,12 @@ async function savedExperiment() {
 async function rebuild(repository: D1PerformRepository) {
   const experiment = (await repository.getExperiment("experiment-1"))!;
   return rebuildSavedReview({
-    experiment, variants: await repository.listVariants(experiment.id),
-    assignments: await repository.listAssignments(experiment.id), audience, asset, liveLaunch: false,
+    experiment,
+    variants: await repository.listVariants(experiment.id),
+    assignments: await repository.listAssignments(experiment.id),
+    audience,
+    asset,
+    liveLaunch: false,
   });
 }
 
@@ -61,7 +86,10 @@ describe("continue to launch", () => {
 
   it("refuses when the stored split no longer reproduces", async () => {
     const { sqlite, repository } = await savedExperiment();
-    const fan = sqlite.prepare("SELECT fan_uuid, arm FROM assignments LIMIT 1").get() as { fan_uuid: string; arm: string };
+    const fan = sqlite.prepare("SELECT fan_uuid, arm FROM assignments LIMIT 1").get() as {
+      fan_uuid: string;
+      arm: string;
+    };
     sqlite.prepare("PRAGMA foreign_keys = OFF").run();
     sqlite.prepare("UPDATE assignments SET arm = ? WHERE fan_uuid = ?").run(fan.arm === "A" ? "B" : "A", fan.fan_uuid);
     await expect(rebuild(repository)).rejects.toThrow(/could not be reproduced/);
@@ -79,21 +107,25 @@ describe("discard", () => {
     const { sqlite, repository } = await savedExperiment();
     await discardExperiment({ repository, experimentId: "experiment-1", now: () => now });
     await discardExperiment({ repository, experimentId: "experiment-1", now: () => now });
-    expect(sqlite.prepare("SELECT state, invalid_reason FROM experiments").get())
-      .toEqual({ state: "INVALID", invalid_reason: discardedReason });
+    expect(sqlite.prepare("SELECT state, invalid_reason FROM experiments").get()).toEqual({
+      state: "INVALID",
+      invalid_reason: discardedReason,
+    });
   });
 
   it("refuses a launched experiment", async () => {
     const { sqlite, repository } = await savedExperiment();
     sqlite.prepare("UPDATE experiments SET state = 'RUNNING'").run();
-    await expect(discardExperiment({ repository, experimentId: "experiment-1", now: () => now }))
-      .rejects.toThrow(/not been launched/);
+    await expect(discardExperiment({ repository, experimentId: "experiment-1", now: () => now })).rejects.toThrow(
+      /not been launched/,
+    );
   });
 
   it("does not find another creator's experiment", async () => {
     const { db } = await savedExperiment();
     const other = new D1PerformRepository(db, "creator-2", "DEMO");
-    await expect(discardExperiment({ repository: other, experimentId: "experiment-1", now: () => now }))
-      .rejects.toThrow(/not in this workspace/);
+    await expect(
+      discardExperiment({ repository: other, experimentId: "experiment-1", now: () => now }),
+    ).rejects.toThrow(/not in this workspace/);
   });
 });

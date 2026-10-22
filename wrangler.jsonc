@@ -28,8 +28,7 @@
     "PERFORM_LIVE_CREATOR_UUID": "37cf7958-9d75-4330-a09d-3ecae7f179c3",
     "PERFORM_LIVE_COMMERCE_WEBHOOK_ENABLED": "true",
     "PERFORM_LIVE_CAPABILITIES": "subscriber_state,purchase_enrichment,audience_discovery,send,commerce_webhook,earnings_reconciliation,mass_message_totals",
-    "PERFORM_WRITE_MODE": "enabled",
-    "PERFORM_LIVE_COMMERCE_WEBHOOK_ENABLED": "true"
+    "PERFORM_WRITE_MODE": "enabled"
   },
   "observability": {
     "enabled": true

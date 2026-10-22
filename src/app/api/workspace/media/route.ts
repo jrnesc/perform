@@ -1,7 +1,5 @@
 import { createFanvueClient } from "@fanvue/builder-sdk";
-import {
-  getSession,
-} from "@fanvue/builder-sdk/nextjs/embedded-app";
+import { getSession } from "@fanvue/builder-sdk/nextjs/embedded-app";
 import { NextResponse } from "next/server";
 import { FanvueMediaGateway } from "../../../../integrations/fanvue/fanvue-media-gateway";
 import { DemoMediaGateway } from "../../../../workspace/demo-media-gateway";

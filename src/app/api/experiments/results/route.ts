@@ -16,23 +16,21 @@ export async function POST(request: Request) {
   if (!sessionSecret) return jsonError(503, "not_configured", "Perform is not configured.");
   const session = await getSession(sessionSecret);
   if (!session?.isCreator) return jsonError(401, "disconnected", "Open Perform from Fanvue to reconnect.");
-  if (!canUseDemoWorkspace(
-    session.userUuid,
-    process.env.PERFORM_DEMO_CREATOR_UUIDS,
-    session.handle,
-    process.env.PERFORM_DEMO_CREATOR_HANDLES,
-  )) {
+  if (
+    !canUseDemoWorkspace(
+      session.userUuid,
+      process.env.PERFORM_DEMO_CREATOR_UUIDS,
+      session.handle,
+      process.env.PERFORM_DEMO_CREATOR_HANDLES,
+    )
+  ) {
     return jsonError(403, "demo_forbidden", "This verified creator is not authorised for demo results.");
   }
   try {
     const { env } = await getCloudflareContext({ async: true });
     if (!env.PERFORM_DEMO_DB) return jsonError(503, "database_not_configured", "The demo database is not configured.");
-    const repository = new D1PerformRepository(
-      env.PERFORM_DEMO_DB as unknown as SqlDatabase,
-      session.userUuid,
-      "DEMO",
-    );
-    const body = await request.json().catch(() => ({})) as { experimentId?: string };
+    const repository = new D1PerformRepository(env.PERFORM_DEMO_DB as unknown as SqlDatabase, session.userUuid, "DEMO");
+    const body = (await request.json().catch(() => ({}))) as { experimentId?: string };
     if (!body.experimentId) return jsonError(400, "experiment_required", "An experiment ID is required.");
     const experiment = await repository.getExperiment(body.experimentId);
     if (!experiment) return jsonError(404, "experiment_not_found", "That experiment is not in this workspace.");

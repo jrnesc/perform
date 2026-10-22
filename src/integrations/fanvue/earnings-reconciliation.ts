@@ -1,16 +1,6 @@
 import type { Arm } from "../../domain/allocation";
-import {
-  assignmentWindowStrategy,
-  type PurchaseAttributionStrategy,
-  type SendWindow,
-} from "../../live/attribution";
-import {
-  json,
-  LiveReadError,
-  record,
-  string,
-  type FanvueReadTransport,
-} from "./live-read-contracts";
+import { assignmentWindowStrategy, type PurchaseAttributionStrategy, type SendWindow } from "../../live/attribution";
+import { json, LiveReadError, record, string, type FanvueReadTransport } from "./live-read-contracts";
 
 /**
  * Only message sales and their reversals can belong to an experiment. Rewards (`referral`,
@@ -52,19 +42,34 @@ function parseEarning(value: unknown): Earning | null {
   const source = string(item?.source);
   const fanUuid = string(user?.uuid);
   const gross = item?.gross;
-  const messageUuid = item?.messageUuid === undefined || item.messageUuid === null
-    ? null : string(item.messageUuid);
-  const reversed = item?.reversedTransactionOrderId === undefined || item.reversedTransactionOrderId === null
-    ? null : string(item.reversedTransactionOrderId);
+  const messageUuid = item?.messageUuid === undefined || item.messageUuid === null ? null : string(item.messageUuid);
+  const reversed =
+    item?.reversedTransactionOrderId === undefined || item.reversedTransactionOrderId === null
+      ? null
+      : string(item.reversedTransactionOrderId);
   const messageType = item?.messageType == null ? null : string(item.messageType);
   const occurredAt = item?.date == null ? null : string(item.date);
-  if (!transactionId || !source || !fanUuid || typeof gross !== "number" || !Number.isSafeInteger(gross) ||
-      (item?.messageUuid != null && !messageUuid) || (item?.reversedTransactionOrderId != null && !reversed) ||
-      (item?.messageType != null && !messageType) ||
-      (occurredAt !== null && Number.isNaN(Date.parse(occurredAt)))) return null;
+  if (
+    !transactionId ||
+    !source ||
+    !fanUuid ||
+    typeof gross !== "number" ||
+    !Number.isSafeInteger(gross) ||
+    (item?.messageUuid != null && !messageUuid) ||
+    (item?.reversedTransactionOrderId != null && !reversed) ||
+    (item?.messageType != null && !messageType) ||
+    (occurredAt !== null && Number.isNaN(Date.parse(occurredAt)))
+  )
+    return null;
   return {
-    transactionId, reversedTransactionId: reversed, fanUuid, messageUuid, messageType, occurredAt,
-    source, grossMinor: gross,
+    transactionId,
+    reversedTransactionId: reversed,
+    fanUuid,
+    messageUuid,
+    messageType,
+    occurredAt,
+    source,
+    grossMinor: gross,
   };
 }
 
@@ -78,8 +83,12 @@ export async function reconcileExperimentEarnings(input: {
   /** ADR 0015. Defaults to assignment and window, with the read window as the send window. */
   attribution?: { strategy: PurchaseAttributionStrategy; window: SendWindow | null };
 }): Promise<EarningsReconciliation> {
-  if (Number.isNaN(Date.parse(input.startAt)) || Number.isNaN(Date.parse(input.endAt)) ||
-      Date.parse(input.startAt) >= Date.parse(input.endAt)) throw new Error("A valid earnings reconciliation window is required");
+  if (
+    Number.isNaN(Date.parse(input.startAt)) ||
+    Number.isNaN(Date.parse(input.endAt)) ||
+    Date.parse(input.startAt) >= Date.parse(input.endAt)
+  )
+    throw new Error("A valid earnings reconciliation window is required");
   const rows = new Map<string, Earning>();
   const cursors = new Set<string>();
   let cursor: string | null = null;
@@ -137,14 +146,19 @@ export async function reconcileExperimentEarnings(input: {
     const candidate = {
       experimentId: "experiment",
       assignedArm: input.assignments[row.fanUuid] ?? null,
-      messageArm: row.messageUuid ? input.messages[row.messageUuid] ?? null : null,
+      messageArm: row.messageUuid ? (input.messages[row.messageUuid] ?? null) : null,
       window,
     };
     if (candidate.assignedArm === null && candidate.messageArm === null) continue;
-    const decision = strategy.decide({
-      purchaserUuid: row.fanUuid, messageUuid: row.messageUuid ?? "", messageType: row.messageType,
-      occurredAt: row.occurredAt ?? input.startAt,
-    }, [candidate]);
+    const decision = strategy.decide(
+      {
+        purchaserUuid: row.fanUuid,
+        messageUuid: row.messageUuid ?? "",
+        messageType: row.messageType,
+        occurredAt: row.occurredAt ?? input.startAt,
+      },
+      [candidate],
+    );
     if (decision.kind === "MISSING_ASSIGNMENT") {
       missingAssignments.add(row.fanUuid);
       continue;

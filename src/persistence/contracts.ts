@@ -9,11 +9,7 @@ import type {
 import type { AnalysedResult, AudienceLearning, ExperimentResultSummary } from "../results/contracts";
 
 export type DataProvenance = "REAL" | "DEMO";
-export type MetricSource =
-  | "WEBHOOK_DERIVED"
-  | "FANVUE_RECONCILIATION"
-  | "DEMO"
-  | "DRY_RUN";
+export type MetricSource = "WEBHOOK_DERIVED" | "FANVUE_RECONCILIATION" | "DEMO" | "DRY_RUN";
 
 export interface ExperimentRecord {
   id: string;
@@ -112,11 +108,7 @@ export interface PerformRepository {
   listAssignments(experimentId: string): Promise<readonly Assignment[]>;
   listVariants(experimentId: string): Promise<readonly VariantDefinition[]>;
   listSendIntents(experimentId: string): Promise<readonly StoredSendIntent[]>;
-  saveAssignmentChunk(
-    experimentId: string,
-    assignments: readonly Assignment[],
-    assignedAt: string,
-  ): Promise<void>;
+  saveAssignmentChunk(experimentId: string, assignments: readonly Assignment[], assignedAt: string): Promise<void>;
   finalizeAllocation(input: AllocationCommit): Promise<void>;
   createSendIntents(intents: readonly NewSendIntent[]): Promise<void>;
   recordSendOutcome(outcome: SendOutcome): Promise<void>;

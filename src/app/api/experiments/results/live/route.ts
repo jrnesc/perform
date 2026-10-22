@@ -26,7 +26,9 @@ export async function GET(request: Request) {
   try {
     records = await new D1CapabilityRecordReader(db, session.userUuid).snapshot();
   } catch (error) {
-    console.error("results.activation_records_unavailable", { errorName: error instanceof Error ? error.name : "unknown" });
+    console.error("results.activation_records_unavailable", {
+      errorName: error instanceof Error ? error.name : "unknown",
+    });
     return jsonError(503, "activation_records_unavailable", "Capability records are not available.");
   }
   const result = await runGuardedLiveResults({
@@ -40,8 +42,8 @@ export async function GET(request: Request) {
     }),
   });
   if (result.status === "REFUSED") {
-    const status = result.reason === "EXPERIMENT_NOT_FOUND" ? 404
-      : result.reason === "CAPABILITY_NOT_ACTIVE" ? 409 : 403;
+    const status =
+      result.reason === "EXPERIMENT_NOT_FOUND" ? 404 : result.reason === "CAPABILITY_NOT_ACTIVE" ? 409 : 403;
     return jsonError(status, result.reason.toLowerCase(), "Live Results are not available.", {
       capabilities: result.capabilities ?? null,
     });

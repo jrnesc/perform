@@ -28,8 +28,7 @@ function mapItem(item: VaultMediaItem): MediaAsset {
     id: item.uuid,
     name: item.name?.trim() || "Untitled Vault asset",
     mediaType: item.mediaType ?? "unknown",
-    status:
-      item.status === "ready" ? "ready" : item.status === "error" ? "unavailable" : "processing",
+    status: item.status === "ready" ? "ready" : item.status === "error" ? "unavailable" : "processing",
     createdAt: item.createdAt,
     thumbnailUrl: thumbnail(item),
     provenance,
@@ -82,10 +81,7 @@ export class FanvueMediaGateway implements MediaReadGateway {
 
   async getMedia(id: string): Promise<MediaAsset | null> {
     if (isDemoIdentifier(id)) {
-      throw new MediaReadError(
-        "INVALID_IDENTIFIER",
-        "Seeded demo identifiers cannot be sent to Fanvue.",
-      );
+      throw new MediaReadError("INVALID_IDENTIFIER", "Seeded demo identifiers cannot be sent to Fanvue.");
     }
     const result = await this.vault.getMedia(id, { variants: [...previewVariants] });
     if (result.isErr()) {

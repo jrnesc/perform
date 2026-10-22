@@ -8,7 +8,16 @@ import type { LaunchRepository } from "./launch-repository";
 import type { VerifiedCreatorSession } from "./capture-entry";
 
 export type LaunchEntryResult =
-  | { status: "REFUSED"; reason: "NOT_A_VERIFIED_CREATOR" | "WRITE_MODE_DISABLED" | "CAPABILITY_NOT_ACTIVE" | "EXPERIMENT_NOT_FOUND" | "NOT_REAL_PROVENANCE"; capability?: CapabilityState }
+  | {
+      status: "REFUSED";
+      reason:
+        | "NOT_A_VERIFIED_CREATOR"
+        | "WRITE_MODE_DISABLED"
+        | "CAPABILITY_NOT_ACTIVE"
+        | "EXPERIMENT_NOT_FOUND"
+        | "NOT_REAL_PROVENANCE";
+      capability?: CapabilityState;
+    }
   | { status: "LAUNCHED"; result: LaunchResult };
 
 /**
@@ -41,14 +50,20 @@ export async function runGuardedRealLaunch(input: {
   }
   const repositories = await input.repositories(session.userUuid);
   const experiment = await repositories.repository.getExperiment(input.experimentId);
-  if (!experiment || experiment.creatorUuid !== session.userUuid) return { status: "REFUSED", reason: "EXPERIMENT_NOT_FOUND" };
+  if (!experiment || experiment.creatorUuid !== session.userUuid)
+    return { status: "REFUSED", reason: "EXPERIMENT_NOT_FOUND" };
   if (experiment.dataProvenance !== "REAL") return { status: "REFUSED", reason: "NOT_REAL_PROVENANCE" };
 
   const result = await executeConfirmedLaunch({
-    creatorUuid: session.userUuid, experimentId: experiment.id,
-    scheduledAt: input.scheduledAt, observationEndsAt: input.observationEndsAt,
-    confirmationHash: input.confirmationHash, repository: repositories.repository, launchRepository: repositories.launchRepository,
-    transport: input.transport(), now: input.now,
+    creatorUuid: session.userUuid,
+    experimentId: experiment.id,
+    scheduledAt: input.scheduledAt,
+    observationEndsAt: input.observationEndsAt,
+    confirmationHash: input.confirmationHash,
+    repository: repositories.repository,
+    launchRepository: repositories.launchRepository,
+    transport: input.transport(),
+    now: input.now,
   });
   return { status: "LAUNCHED", result };
 }

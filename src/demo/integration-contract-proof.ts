@@ -103,8 +103,12 @@ export async function buildDemoIntegrationContractProof(): Promise<DemoIntegrati
     { "fixture:fan:a": "A", "fixture:fan:b": "B" },
   );
   const reversal = await verifiedEvent(refund("fixture:event:refund-a", "fixture:payment:a", 1200));
-  const purchaseA = await verifiedEvent(payment("fixture:event:payment-a", "fixture:payment:a", "fixture:fan:a", "fixture:message:a", 1200));
-  const purchaseB = await verifiedEvent(payment("fixture:event:payment-b", "fixture:payment:b", "fixture:fan:b", "fixture:message:b", 1500));
+  const purchaseA = await verifiedEvent(
+    payment("fixture:event:payment-a", "fixture:payment:a", "fixture:fan:a", "fixture:message:a", 1200),
+  );
+  const purchaseB = await verifiedEvent(
+    payment("fixture:event:payment-b", "fixture:payment:b", "fixture:fan:b", "fixture:message:b", 1500),
+  );
 
   projector.ingest(reversal.event, reversal.hash);
   projector.ingest(purchaseA.event, purchaseA.hash);
@@ -144,18 +148,44 @@ export async function buildDemoIntegrationContractProof(): Promise<DemoIntegrati
     liveReceiver: false,
     requestedScopes: performOAuthScopes,
     checks: [
-      { id: "raw-signature", label: "Exact raw-body signature", status: "PASS", detail: "Official fanvue-v0 HMAC contract with a 300-second replay window." },
-      { id: "creator-scope", label: "Creator scoping", status: "PASS", detail: "Only the expected creator and known experiment messages can project evidence." },
-      { id: "duplicates", label: "Retry deduplication", status: "PASS", detail: "The repeated event ID was accepted as a duplicate and counted once." },
-      { id: "ordering", label: "Out-of-order reversal", status: "PASS", detail: "A full refund received before its payment stayed pending, then paired without resurrecting revenue." },
-      { id: "terminal", label: "Versioned conclusion", status: "PASS", detail: "Late evidence marks a frozen conclusion for re-analysis instead of silently rewriting it." },
+      {
+        id: "raw-signature",
+        label: "Exact raw-body signature",
+        status: "PASS",
+        detail: "Official fanvue-v0 HMAC contract with a 300-second replay window.",
+      },
+      {
+        id: "creator-scope",
+        label: "Creator scoping",
+        status: "PASS",
+        detail: "Only the expected creator and known experiment messages can project evidence.",
+      },
+      {
+        id: "duplicates",
+        label: "Retry deduplication",
+        status: "PASS",
+        detail: "The repeated event ID was accepted as a duplicate and counted once.",
+      },
+      {
+        id: "ordering",
+        label: "Out-of-order reversal",
+        status: "PASS",
+        detail: "A full refund received before its payment stayed pending, then paired without resurrecting revenue.",
+      },
+      {
+        id: "terminal",
+        label: "Versioned conclusion",
+        status: "PASS",
+        detail: "Late evidence marks a frozen conclusion for re-analysis instead of silently rewriting it.",
+      },
     ],
     reconciliation: {
       source: "FANVUE_RECONCILIATION_FIXTURE",
       discrepancy: true,
       stale: true,
       appendOnlySnapshots: projector.reconciliationHistory().length as 2,
-      detail: "Agreement and stale missing-event snapshots remain side by side; neither replaces webhook-derived evidence.",
+      detail:
+        "Agreement and stale missing-event snapshots remain side by side; neither replaces webhook-derived evidence.",
     },
   };
 }

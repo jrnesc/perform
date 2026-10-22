@@ -1,11 +1,7 @@
 import type { Arm } from "../domain/allocation";
 import type { EvidenceProjection } from "../integrations/fanvue/creator-evidence";
 import type { ResultPurchase } from "../results/contracts";
-import {
-  countsTowardArms,
-  type AttributionContext,
-  type CommerceEventRecord,
-} from "../persistence/live-evidence";
+import { countsTowardArms, type AttributionContext, type CommerceEventRecord } from "../persistence/live-evidence";
 
 export type ExperimentCommerceProjection = {
   projection: EvidenceProjection;
@@ -30,10 +26,10 @@ export function projectResultPurchases(input: {
   events: readonly CommerceEventRecord[];
   assignments: Readonly<Record<string, Arm>>;
 }): readonly ResultPurchase[] {
-  const reversals = new Map<string, Extract<CommerceEventRecord, { kind: "REVERSAL" }>[]>()
+  const reversals = new Map<string, Extract<CommerceEventRecord, { kind: "REVERSAL" }>[]>();
   for (const event of input.events) {
     if (event.kind === "REVERSAL") {
-      reversals.set(event.paymentId, [...(reversals.get(event.paymentId) ?? []), event])
+      reversals.set(event.paymentId, [...(reversals.get(event.paymentId) ?? []), event]);
     }
   }
   return input.events
@@ -41,10 +37,11 @@ export function projectResultPurchases(input: {
     .filter((event) => event.experimentId === input.experimentId && countsTowardArms(event))
     .filter((event) => input.assignments[event.purchaserUuid] === event.arm)
     .map((event) => {
-      const related = reversals.get(event.paymentId) ?? []
-      const amount = (kind: "REFUND" | "DISPUTE") => related
-        .filter((reversal) => reversal.reversalType === kind)
-        .reduce((total, reversal) => total + (reversal.amountMinor ?? event.grossMinor), 0)
+      const related = reversals.get(event.paymentId) ?? [];
+      const amount = (kind: "REFUND" | "DISPUTE") =>
+        related
+          .filter((reversal) => reversal.reversalType === kind)
+          .reduce((total, reversal) => total + (reversal.amountMinor ?? event.grossMinor), 0);
       return {
         id: event.paymentId,
         fanUuid: event.purchaserUuid,
@@ -53,9 +50,9 @@ export function projectResultPurchases(input: {
         refundedMinor: Math.min(event.grossMinor, amount("REFUND")),
         disputedMinor: Math.min(event.grossMinor, amount("DISPUTE")),
         occurredAt: event.occurredAt,
-      }
+      };
     })
-    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id))
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id));
 }
 
 /**
@@ -73,7 +70,9 @@ export function projectExperimentCommerce(
   const ours = events.filter((event) => event.creatorUuid === creatorUuid);
   const payments = ours.filter((e): e is Payment => e.kind === "PAYMENT" && inWindow(e));
   const paymentIds = new Set(payments.map((payment) => payment.paymentId));
-  const reversed = new Set(ours.filter((e) => e.kind === "REVERSAL" && paymentIds.has(e.paymentId)).map((e) => e.paymentId));
+  const reversed = new Set(
+    ours.filter((e) => e.kind === "REVERSAL" && paymentIds.has(e.paymentId)).map((e) => e.paymentId),
+  );
   const storedPaymentIds = new Set(ours.filter((e) => e.kind === "PAYMENT").map((e) => e.paymentId));
 
   const purchases: Record<Arm, number> = { A: 0, B: 0 };
@@ -108,8 +107,13 @@ export function projectExperimentCommerce(
   const pendingReversals = ours.filter((e) => e.kind === "REVERSAL" && !storedPaymentIds.has(e.paymentId)).length;
   return {
     projection: {
-      purchases, grossMinor, settledPurchases, settledMinor,
-      duplicateEvents: 0, ignoredEvents, pendingReversals,
+      purchases,
+      grossMinor,
+      settledPurchases,
+      settledMinor,
+      duplicateEvents: 0,
+      ignoredEvents,
+      pendingReversals,
       revision: counted + reversed.size,
     },
     missingAssignmentFans: [...missing],

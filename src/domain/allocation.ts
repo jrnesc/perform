@@ -39,9 +39,7 @@ function normaliseMembers(members: readonly AudienceMember[]): AudienceMember[] 
 
     const previous = unique.get(fanUuid);
     if (previous && previous.stratum !== stratum) {
-      throw new Error(
-        `Fan ${fanUuid} appears in conflicting strata: ${previous.stratum} and ${stratum}`,
-      );
+      throw new Error(`Fan ${fanUuid} appears in conflicting strata: ${previous.stratum} and ${stratum}`);
     }
 
     unique.set(fanUuid, { fanUuid, stratum });
@@ -56,10 +54,7 @@ function normaliseMembers(members: readonly AudienceMember[]): AudienceMember[] 
  * and alternated between arms. The seeded starting arm prevents A from always
  * receiving the extra member in odd-sized buckets.
  */
-export function allocateAudience(
-  experimentUuid: string,
-  members: readonly AudienceMember[],
-): Assignment[] {
+export function allocateAudience(experimentUuid: string, members: readonly AudienceMember[]): Assignment[] {
   if (!experimentUuid.trim()) throw new Error("An experiment UUID is required");
 
   const strata = new Map<string, AudienceMember[]>();
@@ -74,9 +69,7 @@ export function allocateAudience(
     .sort(([left], [right]) => left.localeCompare(right))
     .flatMap(([stratum, group]) => {
       const firstArm: Arm =
-        hashParts(allocationAlgorithmVersion, experimentUuid, stratum, "first-arm") % 2 === 0
-          ? "A"
-          : "B";
+        hashParts(allocationAlgorithmVersion, experimentUuid, stratum, "first-arm") % 2 === 0 ? "A" : "B";
 
       return group
         .sort((left, right) => {
@@ -95,17 +88,14 @@ export function allocateAudience(
 }
 
 /** A stable SHA-256 fingerprint of the complete, deduplicated audience. */
-export async function hashAudienceSnapshot(
-  members: readonly AudienceMember[],
-): Promise<string> {
+export async function hashAudienceSnapshot(members: readonly AudienceMember[]): Promise<string> {
   const canonical = normaliseMembers(members)
     .map(({ fanUuid, stratum }) => [fanUuid, stratum ?? defaultStratum] as const)
-    .sort(([leftFan, leftStratum], [rightFan, rightStratum]) =>
-      leftFan.localeCompare(rightFan) || leftStratum.localeCompare(rightStratum),
+    .sort(
+      ([leftFan, leftStratum], [rightFan, rightStratum]) =>
+        leftFan.localeCompare(rightFan) || leftStratum.localeCompare(rightStratum),
     );
   const bytes = new TextEncoder().encode(JSON.stringify(canonical));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)]
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("");
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
 }

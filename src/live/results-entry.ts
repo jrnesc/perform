@@ -58,11 +58,12 @@ export async function runGuardedLiveResults(input: {
     evidenceRepository.listCommerceEvents(experiment.id),
     evidenceRepository.listReconciliations(experiment.id),
   ]);
-  const paymentStrategies = new Set(events
-    .filter((event) => event.kind === "PAYMENT")
-    .map((event) => event.attributionStrategy));
-  const attributionStrategy = reconciliations.at(-1)?.attributionStrategy
-    ?? (paymentStrategies.size === 1 ? [...paymentStrategies][0] : "ASSIGNMENT_WINDOW");
+  const paymentStrategies = new Set(
+    events.filter((event) => event.kind === "PAYMENT").map((event) => event.attributionStrategy),
+  );
+  const attributionStrategy =
+    reconciliations.at(-1)?.attributionStrategy ??
+    (paymentStrategies.size === 1 ? [...paymentStrategies][0] : "ASSIGNMENT_WINDOW");
   return {
     status: "AVAILABLE",
     provenance: "REAL",

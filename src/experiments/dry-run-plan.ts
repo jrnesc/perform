@@ -51,10 +51,7 @@ function armEffects(review: ExperimentReview, arm: Arm): DryRunEffect[] {
 }
 
 /** Build data only. This module deliberately exposes no effect executor. */
-export function buildDryRunPlan(
-  review: ExperimentReview,
-  options: { liveLaunch?: boolean } = {},
-): DryRunPlan {
+export function buildDryRunPlan(review: ExperimentReview, options: { liveLaunch?: boolean } = {}): DryRunPlan {
   if (review.overlapCount !== 0) throw new Error("A dry run requires zero cohort overlap");
   if (review.provenance.kind === "FANVUE" && !options.liveLaunch) {
     throw new Error("Phase 3 dry runs accept the server-authorised demo audience only");

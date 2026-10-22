@@ -123,16 +123,18 @@ export async function POST(request: Request) {
   if (!sessionSecret) return jsonError(503, "not_configured", "Perform is not configured.");
   const session = await getSession(sessionSecret);
   if (!session?.isCreator) return jsonError(401, "disconnected", "Open Perform from Fanvue to reconnect.");
-  if (!canUseDemoWorkspace(
-    session.userUuid,
-    process.env.PERFORM_DEMO_CREATOR_UUIDS,
-    session.handle,
-    process.env.PERFORM_DEMO_CREATOR_HANDLES,
-  )) {
+  if (
+    !canUseDemoWorkspace(
+      session.userUuid,
+      process.env.PERFORM_DEMO_CREATOR_UUIDS,
+      session.handle,
+      process.env.PERFORM_DEMO_CREATOR_HANDLES,
+    )
+  ) {
     return jsonError(403, "demo_forbidden", "This verified creator is not authorised for the demo workspace.");
   }
   try {
-    const body = await request.json() as RequestBody;
+    const body = (await request.json()) as RequestBody;
     if (typeof body.id !== "string" || typeof body.name !== "string") {
       return jsonError(400, "invalid_draft", "Experiment ID and name are required.");
     }
@@ -147,7 +149,8 @@ export async function POST(request: Request) {
     }
     const audience = DEMO_AUDIENCES.find(({ id }) => id === body.audienceId);
     const asset = DEMO_VAULT_ASSETS.find(({ id }) => id === body.assetId);
-    if (!audience || !asset) return jsonError(400, "invalid_demo_identifier", "The selected demo source is not recognised.");
+    if (!audience || !asset)
+      return jsonError(400, "invalid_demo_identifier", "The selected demo source is not recognised.");
     const variants = parseVariants(body.variants, asset.id);
     const review = await buildExperimentReview({
       id: body.id,
@@ -161,11 +164,7 @@ export async function POST(request: Request) {
     const plan = buildDryRunPlan(review);
     const { env } = await getCloudflareContext({ async: true });
     if (!env.PERFORM_DEMO_DB) return jsonError(503, "database_not_configured", "The demo database is not configured.");
-    const persistence = await persistDryRun(
-      env.PERFORM_DEMO_DB as unknown as SqlDatabase,
-      session.userUuid,
-      review,
-    );
+    const persistence = await persistDryRun(env.PERFORM_DEMO_DB as unknown as SqlDatabase, session.userUuid, review);
     return NextResponse.json({ review, plan, persistence });
   } catch (error) {
     const message = error instanceof Error ? error.message : "The dry-run could not be saved.";

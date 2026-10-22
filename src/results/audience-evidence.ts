@@ -14,20 +14,29 @@ export const minimumDescriptiveSegmentSize = 5;
 export type AudienceBreakdownDimension = "PRIOR_PURCHASER" | "RELATIONSHIP";
 
 export const subscriberRelationships: readonly SubscriberRelationship[] = [
-  "never_subscribed", "trialing", "active_renewing", "active_not_renewing", "lapsed",
+  "never_subscribed",
+  "trialing",
+  "active_renewing",
+  "active_not_renewing",
+  "lapsed",
 ];
 
 export type AudienceSegment = {
   key: PriorPurchaserStatus | SubscriberRelationship;
   label: string;
   members: readonly AudienceMemberEvidence[];
-  arms: Readonly<Record<Arm, {
-    assigned: number;
-    converted: number;
-    settledPurchases: number;
-    settledRevenueMinor: number;
-    reversedPurchases: number;
-  }>>;
+  arms: Readonly<
+    Record<
+      Arm,
+      {
+        assigned: number;
+        converted: number;
+        settledPurchases: number;
+        settledRevenueMinor: number;
+        reversedPurchases: number;
+      }
+    >
+  >;
   isSmall: boolean;
 };
 
@@ -47,8 +56,11 @@ export function relationshipLabel(key: SubscriberRelationship): string {
 
 /** Evidence written before the five live cohorts (v1 bands) is not shown as if it were current. */
 export function isCurrentAudienceEvidence(evidence: readonly AudienceMemberEvidence[]): boolean {
-  return evidence.length > 0 && evidence.every((row) => row.version === AUDIENCE_EVIDENCE_VERSION) &&
-    new Set(evidence.map((row) => row.provenance)).size === 1;
+  return (
+    evidence.length > 0 &&
+    evidence.every((row) => row.version === AUDIENCE_EVIDENCE_VERSION) &&
+    new Set(evidence.map((row) => row.provenance)).size === 1
+  );
 }
 
 export function assertAudienceEvidence(fixture: DemoResultFixture): void {
@@ -71,7 +83,7 @@ export function assertAudienceEvidence(fixture: DemoResultFixture): void {
     if (row.priorSettledPurchaseCount < 0 || row.priorSettledSpendMinor < 0 || row.settledRevenueMinor < 0) {
       throw new Error("Audience evidence counts and settled value cannot be negative");
     }
-    if ((row.priorSettledPurchaseCount > 0) !== (row.priorPurchaserStatus === "PRIOR_PURCHASER")) {
+    if (row.priorSettledPurchaseCount > 0 !== (row.priorPurchaserStatus === "PRIOR_PURCHASER")) {
       throw new Error("Prior-purchaser status must be derived from pre-experiment settled purchases");
     }
     if ((row.subscriberRelationship === "never_subscribed") !== (row.earliestSubscriptionAt === null)) {
@@ -88,12 +100,16 @@ export function assertAudienceEvidence(fixture: DemoResultFixture): void {
     const rows = fixture.audienceEvidence.filter((row) => row.arm === arm);
     const purchases = fixture.purchases.filter((row) => row.arm === arm);
     const settled = purchases.filter((row) => row.grossMinor - row.refundedMinor - row.disputedMinor > 0);
-    const sum = (field: "grossRevenueMinor" | "settledRevenueMinor") => rows.reduce((total, row) => total + row[field], 0);
-    if (rows.length !== fixture.assignments.filter((row) => row.arm === arm).length ||
-        rows.reduce((total, row) => total + row.grossPurchaseCount, 0) !== purchases.length ||
-        rows.reduce((total, row) => total + row.settledPurchaseCount, 0) !== settled.length ||
-        sum("grossRevenueMinor") !== purchases.reduce((total, row) => total + row.grossMinor, 0) ||
-        sum("settledRevenueMinor") !== settled.reduce((total, row) => total + row.grossMinor - row.refundedMinor - row.disputedMinor, 0)) {
+    const sum = (field: "grossRevenueMinor" | "settledRevenueMinor") =>
+      rows.reduce((total, row) => total + row[field], 0);
+    if (
+      rows.length !== fixture.assignments.filter((row) => row.arm === arm).length ||
+      rows.reduce((total, row) => total + row.grossPurchaseCount, 0) !== purchases.length ||
+      rows.reduce((total, row) => total + row.settledPurchaseCount, 0) !== settled.length ||
+      sum("grossRevenueMinor") !== purchases.reduce((total, row) => total + row.grossMinor, 0) ||
+      sum("settledRevenueMinor") !==
+        settled.reduce((total, row) => total + row.grossMinor - row.refundedMinor - row.disputedMinor, 0)
+    ) {
       throw new Error("Audience evidence does not reconcile to aggregate arm totals");
     }
   }
@@ -106,13 +122,12 @@ export function audienceSegments(
   if (new Set(evidence.map((row) => row.provenance)).size > 1) {
     throw new Error("Seeded and live audience evidence cannot be combined in one breakdown");
   }
-  const keys: readonly AudienceSegment["key"][] = dimension === "PRIOR_PURCHASER"
-    ? ["NEVER_PURCHASED", "PRIOR_PURCHASER"]
-    : subscriberRelationships;
+  const keys: readonly AudienceSegment["key"][] =
+    dimension === "PRIOR_PURCHASER" ? ["NEVER_PURCHASED", "PRIOR_PURCHASER"] : subscriberRelationships;
   return keys.map((key) => {
-    const members = evidence.filter((row) => dimension === "PRIOR_PURCHASER"
-      ? row.priorPurchaserStatus === key
-      : row.subscriberRelationship === key);
+    const members = evidence.filter((row) =>
+      dimension === "PRIOR_PURCHASER" ? row.priorPurchaserStatus === key : row.subscriberRelationship === key,
+    );
     const armSummary = (arm: Arm) => {
       const rows = members.filter((row) => row.arm === arm);
       return {
@@ -123,13 +138,27 @@ export function audienceSegments(
         reversedPurchases: rows.reduce((total, row) => total + row.grossPurchaseCount - row.settledPurchaseCount, 0),
       };
     };
-    return { key, label: labels[key], members, arms: { A: armSummary("A"), B: armSummary("B") }, isSmall: members.length < minimumDescriptiveSegmentSize };
+    return {
+      key,
+      label: labels[key],
+      members,
+      arms: { A: armSummary("A"), B: armSummary("B") },
+      isSmall: members.length < minimumDescriptiveSegmentSize,
+    };
   });
 }
 
-export type MemberOutcomes = Pick<AudienceMemberEvidence,
-  "converted" | "grossPurchaseCount" | "settledPurchaseCount" | "grossRevenueMinor" |
-  "settledRevenueMinor" | "fullyRefunded" | "disputed" | "lastOutcomeAt">;
+export type MemberOutcomes = Pick<
+  AudienceMemberEvidence,
+  | "converted"
+  | "grossPurchaseCount"
+  | "settledPurchaseCount"
+  | "grossRevenueMinor"
+  | "settledRevenueMinor"
+  | "fullyRefunded"
+  | "disputed"
+  | "lastOutcomeAt"
+>;
 
 /**
  * The single mapping from a stored `audience_member_evidence` row to what Results shows. Seeded

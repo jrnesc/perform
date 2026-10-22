@@ -10,16 +10,22 @@ export const runtime = "nodejs";
  * only marks it INVALID in Perform; the frozen split stays on record and the list hides it.
  */
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => ({})) as { experimentId?: unknown; workspace?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { experimentId?: unknown; workspace?: unknown };
   const resolved = await experimentRequestContext(body);
   if ("error" in resolved) return resolved.error;
   const repository = new D1PerformRepository(
-    resolved.db, resolved.session.userUuid, resolved.workspace === "real" ? "REAL" : "DEMO",
+    resolved.db,
+    resolved.session.userUuid,
+    resolved.workspace === "real" ? "REAL" : "DEMO",
   );
   try {
     await discardExperiment({ repository, experimentId: resolved.experimentId, now: () => new Date().toISOString() });
     return NextResponse.json({ discarded: true });
   } catch (error) {
-    return jsonError(409, "discard_failed", error instanceof Error ? error.message : "The experiment could not be discarded.");
+    return jsonError(
+      409,
+      "discard_failed",
+      error instanceof Error ? error.message : "The experiment could not be discarded.",
+    );
   }
 }

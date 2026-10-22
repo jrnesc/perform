@@ -1,10 +1,6 @@
 import { assignmentWindowCaveat, type AttributionStrategyId } from "../live/attribution";
 import { projectResultPurchases } from "../live/commerce-projection";
-import {
-  countsTowardArms,
-  type CommerceEventRecord,
-  type AudienceEvidenceRow,
-} from "../persistence/live-evidence";
+import { countsTowardArms, type CommerceEventRecord, type AudienceEvidenceRow } from "../persistence/live-evidence";
 import { memberEvidenceFromRow } from "./audience-evidence";
 import type { AudienceMemberEvidence } from "./contracts";
 
@@ -45,7 +41,10 @@ export function buildLiveAudienceBreakdown(input: {
   let unmatchedPlausible = 0;
   for (const event of input.events) {
     if (event.kind !== "PAYMENT" || event.experimentId !== input.experimentId) continue;
-    if (!countsTowardArms(event)) { unmatchedPlausible += 1; continue; }
+    if (!countsTowardArms(event)) {
+      unmatchedPlausible += 1;
+      continue;
+    }
     const row = rowByFan.get(event.purchaserUuid);
     if (!row || row.arm !== event.arm || event.occurredAt < row.capturedAt) continue;
     if (!event.messageMatched) assignmentWindowOnly += 1;
@@ -59,14 +58,19 @@ export function buildLiveAudienceBreakdown(input: {
   }
 
   const evidence = input.rows.map((row): AudienceMemberEvidence => {
-    const payments = [...(purchasesByFan.get(row.fanUuid) ?? [])].sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+    const payments = [...(purchasesByFan.get(row.fanUuid) ?? [])].sort((a, b) =>
+      a.occurredAt.localeCompare(b.occurredAt),
+    );
     const settled = payments.filter((payment) => payment.refundedMinor + payment.disputedMinor < payment.grossMinor);
     return memberEvidenceFromRow(row, "REAL", {
       converted: settled.length > 0,
       grossPurchaseCount: payments.length,
       settledPurchaseCount: settled.length,
       grossRevenueMinor: payments.reduce((total, payment) => total + payment.grossMinor, 0),
-      settledRevenueMinor: settled.reduce((total, payment) => total + payment.grossMinor - payment.refundedMinor - payment.disputedMinor, 0),
+      settledRevenueMinor: settled.reduce(
+        (total, payment) => total + payment.grossMinor - payment.refundedMinor - payment.disputedMinor,
+        0,
+      ),
       fullyRefunded: payments.some((payment) => payment.refundedMinor === payment.grossMinor),
       disputed: payments.some((payment) => payment.disputedMinor > 0),
       lastOutcomeAt: payments.at(-1)?.occurredAt,

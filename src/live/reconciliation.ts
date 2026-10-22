@@ -30,8 +30,13 @@ export function planReconciliationWindows(input: {
   const observationEnd = Date.parse(input.observationEnd);
   const until = Date.parse(input.until);
   const through = input.reconciledThrough === null ? null : Date.parse(input.reconciledThrough);
-  if ([observationStart, observationEnd, until].some(Number.isNaN) || (through !== null && Number.isNaN(through)) ||
-      observationStart >= observationEnd || maxWindowMs <= overlapMs || overlapMs < 0) {
+  if (
+    [observationStart, observationEnd, until].some(Number.isNaN) ||
+    (through !== null && Number.isNaN(through)) ||
+    observationStart >= observationEnd ||
+    maxWindowMs <= overlapMs ||
+    overlapMs < 0
+  ) {
     throw new Error("A valid reconciliation plan requires ordered times and a window larger than its overlap");
   }
   const end = Math.min(observationEnd, until);
@@ -72,8 +77,11 @@ export async function reconcileExperimentWindow(input: {
   const events = await input.repository.listCommerceEvents(input.experimentId);
   const webhook = projectExperimentCommerce(input.creatorUuid, events, context, input.window);
   const earnings = await reconcileExperimentEarnings({
-    startAt: input.window.startAt, endAt: input.window.endAt,
-    messages: context.messages, assignments: context.assignments, transport: input.transport,
+    startAt: input.window.startAt,
+    endAt: input.window.endAt,
+    messages: context.messages,
+    assignments: context.assignments,
+    transport: input.transport,
     attribution: { strategy, window: context.window },
   });
   const massMessageCheck = input.checkMassMessages
@@ -81,14 +89,16 @@ export async function reconcileExperimentWindow(input: {
     : null;
 
   const arms: readonly Arm[] = ["A", "B"];
-  const discrepancy = arms.some((arm) =>
-    webhook.projection.settledPurchases[arm] !== earnings.settledPurchases[arm] ||
-    webhook.projection.settledMinor[arm] !== earnings.settledMinor[arm]);
+  const discrepancy = arms.some(
+    (arm) =>
+      webhook.projection.settledPurchases[arm] !== earnings.settledPurchases[arm] ||
+      webhook.projection.settledMinor[arm] !== earnings.settledMinor[arm],
+  );
   const missingAssignmentCount = new Set([...earnings.missingAssignments, ...webhook.missingAssignmentFans]).size;
   const orphanReversalCount = earnings.orphanReversals.length;
   const isComplete = missingAssignmentCount === 0 && orphanReversalCount === 0 && earnings.ignoredRows === 0;
-  const evidenceChanged = input.frozenConclusionRevision !== null &&
-    input.frozenConclusionRevision !== webhook.projection.revision;
+  const evidenceChanged =
+    input.frozenConclusionRevision !== null && input.frozenConclusionRevision !== webhook.projection.revision;
 
   const problems = [
     discrepancy && "webhook and earnings totals differ",
@@ -105,15 +115,23 @@ export async function reconcileExperimentWindow(input: {
     windowStart: input.window.startAt,
     windowEnd: input.window.endAt,
     capturedAt: input.capturedAt,
-    isComplete, discrepancy,
+    isComplete,
+    discrepancy,
     needsReanalysis: discrepancy || evidenceChanged,
     webhookSettledPurchases: webhook.projection.settledPurchases,
     webhookSettledMinor: webhook.projection.settledMinor,
     reconciledSettledPurchases: earnings.settledPurchases,
     reconciledSettledMinor: earnings.settledMinor,
-    missingAssignmentCount, orphanReversalCount, ignoredRowCount: earnings.ignoredRows,
-    attributionStrategy: strategy.id, assignmentWindowOnlyCount, unmatchedPlausibleCount, massMessageCheck,
-    note: problems.length ? `Not reconciled: ${problems.join("; ")}.` : "Webhook evidence agrees with the earnings ledger.",
+    missingAssignmentCount,
+    orphanReversalCount,
+    ignoredRowCount: earnings.ignoredRows,
+    attributionStrategy: strategy.id,
+    assignmentWindowOnlyCount,
+    unmatchedPlausibleCount,
+    massMessageCheck,
+    note: problems.length
+      ? `Not reconciled: ${problems.join("; ")}.`
+      : "Webhook evidence agrees with the earnings ledger.",
   };
   await input.repository.appendReconciliation(record);
   return record;
@@ -141,8 +159,11 @@ async function compareWithMassMessages(
     revenueMinor[arm] += aggregate.totalRevenueMinor;
   }
   const ours = projectExperimentCommerce(creatorUuid, events, context).projection;
-  const mismatch = read.missing.length > 0 || (["A", "B"] as const).some((arm) =>
-    ours.purchases[arm] !== purchases[arm] || ours.grossMinor[arm] !== revenueMinor[arm]);
+  const mismatch =
+    read.missing.length > 0 ||
+    (["A", "B"] as const).some(
+      (arm) => ours.purchases[arm] !== purchases[arm] || ours.grossMinor[arm] !== revenueMinor[arm],
+    );
   return { purchases, revenueMinor, mismatch };
 }
 
@@ -170,8 +191,14 @@ export async function reconcileObservation(input: {
   const endAt = Date.parse(now) < Date.parse(confirmation.observationEndsAt) ? now : confirmation.observationEndsAt;
   if (Date.parse(endAt) <= Date.parse(startAt)) throw new Error("Nothing to reconcile before delivery");
   return reconcileExperimentWindow({
-    experimentId: experiment.id, creatorUuid: input.creatorUuid, window: { startAt, endAt },
-    capturedAt: now, transport: input.transport, repository: input.evidenceRepository,
-    newId: input.newId, frozenConclusionRevision: null, checkMassMessages: true,
+    experimentId: experiment.id,
+    creatorUuid: input.creatorUuid,
+    window: { startAt, endAt },
+    capturedAt: now,
+    transport: input.transport,
+    repository: input.evidenceRepository,
+    newId: input.newId,
+    frozenConclusionRevision: null,
+    checkMassMessages: true,
   });
 }
