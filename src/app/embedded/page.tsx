@@ -77,7 +77,10 @@ async function responseBody<T>(response: Response): Promise<T> {
   return body;
 }
 
-export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
+/** A saved, allocated experiment reopened at Review instead of a new setup. */
+export type ResumeTarget = { experimentId: string; workspace: WorkspaceKind };
+
+export function PerformWorkspace({ preview = false, resume }: { preview?: boolean; resume?: ResumeTarget }) {
   const router = useRouter();
   const embeddedAuth = useEmbeddedAuth();
   const { authFetch: fanvueAuthFetch, clearJwt } = useAuth();
@@ -95,8 +98,9 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
           : "dry-run";
     return fetch(`/api/preview/${resource}`, init);
   }, [fanvueAuthFetch, preview]);
-  const [workspace, setWorkspace] = useState<WorkspaceKind>(preview ? "demo" : "real");
-  const [experimentId] = useState(() => crypto.randomUUID());
+  const [workspace, setWorkspace] = useState<WorkspaceKind>(resume?.workspace ?? (preview ? "demo" : "real"));
+  const [experimentId] = useState(() => resume?.experimentId ?? crypto.randomUUID());
+  const [resumeError, setResumeError] = useState("");
   const [name, setName] = useState("");
   const [media, setMedia] = useState<LoadState<WorkspaceResponse>>({ kind: "loading" });
   const [audiences, setAudiences] = useState<LoadState<AudienceResponse>>({ kind: "loading" });
@@ -137,6 +141,36 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
       stage?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" });
     }
   }, [status, step]);
+
+  useEffect(() => {
+    if (status !== "authenticated" || !resume) return;
+    let cancelled = false;
+    authFetch("/api/experiments/resume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(resume),
+    })
+      .then((response) => responseBody<PersistedDryRunResponse>(response))
+      .then((body) => {
+        if (cancelled) return;
+        const saved = body.review.draft;
+        const armA = saved.variants.find(({ arm }) => arm === "A");
+        const armB = saved.variants.find(({ arm }) => arm === "B");
+        setName(saved.name);
+        setVariable(saved.variable);
+        setHypothesis(saved.hypothesis);
+        if (armA) { setCopyA(armA.copy); setPriceA(armA.priceMinor); }
+        if (armB) { setCopyB(armB.copy); setPriceB(armB.priceMinor); }
+        setAudienceId(saved.audience.id);
+        setAssetId(saved.asset.id);
+        setReview(body.review);
+        setPlan(body.plan);
+        setPersisted(true);
+        setStep(4);
+      })
+      .catch((caught) => { if (!cancelled) setResumeError(caught instanceof Error ? caught.message : "This experiment could not be reopened."); });
+    return () => { cancelled = true; };
+  }, [authFetch, resume, status]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -338,14 +372,17 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
 
       {status === "authenticated" && <div className="workspace-shell setup-shell">
         <section className="hero compact-hero">
-          <div><nav className="breadcrumbs" aria-label="Breadcrumb"><Link href={preview ? "/preview" : "/embedded"}>Experiments</Link><span>/</span><span>New experiment</span></nav><h1 className="title-edit"><label className="sr-only" htmlFor="experiment-name">Experiment name</label><input id="experiment-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="Name your experiment" autoComplete="off" /><WritingPenIcon /></h1><p className={`title-hint ${name.trim() ? "done" : ""}`}>{name.trim() ? "Click the title any time to rename." : "Click the title to name this experiment — required to continue."}</p><p className="lede">Build a fair A/B test, review every effect, then deliberately schedule both arms together.</p></div>
-          {demoAvailable && !preview && <div className="workspace-switch" role="group" aria-label="Data workspace"><button aria-pressed={workspace === "real"} className={workspace === "real" ? "active" : ""} onClick={() => chooseWorkspace("real")}>Live</button><button aria-pressed={workspace === "demo"} className={workspace === "demo" ? "active" : ""} onClick={() => chooseWorkspace("demo")}>Seeded demo</button></div>}
+          <div><nav className="breadcrumbs" aria-label="Breadcrumb"><Link href={preview ? "/preview" : "/embedded"}>Experiments</Link><span>/</span><span>{resume ? "Continue experiment" : "New experiment"}</span></nav>{resume ? <h1>{name || "Saved experiment"}</h1> : <><h1 className="title-edit"><label className="sr-only" htmlFor="experiment-name">Experiment name</label><input id="experiment-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={120} placeholder="Name your experiment" autoComplete="off" /><WritingPenIcon /></h1>{name.trim() && <p className="title-hint done">Click the title any time to rename.</p>}</>}<p className="lede">{resume ? "The audience split, asset and variants were frozen when this experiment was saved. Choose when to deliver it, then schedule both arms together." : "Build a fair A/B test, review every effect, then deliberately schedule both arms together."}</p></div>
+          {demoAvailable && !preview && !resume && <div className="workspace-switch" role="group" aria-label="Data workspace"><button aria-pressed={workspace === "real"} className={workspace === "real" ? "active" : ""} onClick={() => chooseWorkspace("real")}>Live</button><button aria-pressed={workspace === "demo"} className={workspace === "demo" ? "active" : ""} onClick={() => chooseWorkspace("demo")}>Demo</button></div>}
         </section>
 
         <ProgressStrip current={step} />
 
         <section className="setup-flow">
-          {step >= 0 && <section className="flow-stage" aria-labelledby="stage-audience">
+          {resume && !review && (resumeError
+            ? <section className="empty-state compact-empty" role="alert"><h3>This experiment could not be reopened</h3><p>{resumeError}</p><Link className="secondary button-link" href="/embedded">Back to experiments</Link></section>
+            : <div className="loading-lines" role="status" aria-busy="true"><span className="sr-only">Reopening the saved experiment</span><i /><i /><i /></div>)}
+          {!resume && step >= 0 && <section className="flow-stage" aria-labelledby="stage-audience">
             <div className="flow-stage-heading"><div><StageIcon stage="Audience" decorative continuous /><h2 id="stage-audience" ref={step === 0 ? stepHeading : undefined} tabIndex={-1}>Audience</h2></div></div>
             {audiences.kind === "loading" && <div className="loading-lines" role="status" aria-busy="true"><span className="sr-only">Loading audience options</span><i /><i /><i /></div>}
             {audiences.kind === "error" && <div className="empty-state compact-empty"><h3>{audiences.code === "live_audience_deferred" ? "Live audience setup is deliberately unavailable" : "Audience data is unavailable"}</h3><p>{audiences.message}</p>{audiences.demoAvailable && workspace === "real" && <button className="primary" onClick={() => chooseWorkspace("demo")}>Use seeded demo audience</button>}{workspace === "demo" && <button className="secondary" onClick={retry}>Try again</button>}</div>}
@@ -356,7 +393,7 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
             })}</div>}
           </section>}
 
-          {step >= 1 && <section className="flow-stage" aria-labelledby="stage-asset">
+          {!resume && step >= 1 && <section className="flow-stage" aria-labelledby="stage-asset">
             <div className="flow-stage-heading"><div><StageIcon stage="Asset" decorative continuous /><h2 id="stage-asset" ref={step === 1 ? stepHeading : undefined} tabIndex={-1}>Asset</h2></div></div>
             {media.kind === "loading" && <div className="asset-grid" role="status" aria-busy="true"><span className="sr-only">Loading Vault assets</span>{Array.from({ length: 3 }, (_, index) => <div className="asset-card skeleton" aria-hidden="true" key={index} />)}</div>}
             {media.kind === "error" && <div className="empty-state compact-empty"><h3>Vault assets are unavailable</h3><p>{media.message}</p><button className="secondary" onClick={retry}>Try again</button></div>}
@@ -364,7 +401,7 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
             {media.kind === "ready" && <div className="asset-grid">{media.data.page.items.map((asset) => <button aria-pressed={assetId === asset.id} className={`asset-card selectable ${assetId === asset.id ? "selected" : ""}`} key={asset.id} onClick={() => setAssetId(asset.id)}><div className="asset-preview" style={asset.thumbnailUrl ? { backgroundImage: `url(${asset.thumbnailUrl})` } : undefined}>{!asset.thumbnailUrl && <AssetMark type={asset.mediaType} />}<span>{asset.status}</span></div><div className="asset-copy"><p>{asset.mediaType}</p><h3>{asset.name}</h3></div></button>)}</div>}
           </section>}
 
-          {step >= 2 && <section className="flow-stage" aria-labelledby="stage-question">
+          {!resume && step >= 2 && <section className="flow-stage" aria-labelledby="stage-question">
             <div className="flow-stage-heading"><div><StageIcon stage="Question" decorative continuous /><h2 id="stage-question" ref={step === 2 ? stepHeading : undefined} tabIndex={-1}>Question</h2></div></div>
             <div className="form-stack">
               <fieldset><legend>What should change?</legend><label className="radio-card"><input type="radio" checked={variable === "COPY"} onChange={() => setVariable("COPY")} /><span><strong>Copy only</strong><small>Primary metric: purchases per assigned recipient</small></span></label><label className="radio-card"><input type="radio" checked={variable === "PRICE"} onChange={() => setVariable("PRICE")} /><span><strong>Price only</strong><small>Primary metric: revenue per assigned recipient</small></span></label></fieldset>
@@ -372,7 +409,7 @@ export function PerformWorkspace({ preview = false }: { preview?: boolean }) {
             </div>
           </section>}
 
-          {step >= 3 && <section className="flow-stage" aria-labelledby="stage-variants">
+          {!resume && step >= 3 && <section className="flow-stage" aria-labelledby="stage-variants">
             <div className="flow-stage-heading"><div><StageIcon stage="Variants" decorative continuous /><h2 id="stage-variants" ref={step === 3 ? stepHeading : undefined} tabIndex={-1}>Variants</h2></div></div>
             <div className="variant-grid">
               <article className="variant-card"><p className="eyebrow">Arm A · Control</p><label className="field"><span>Message copy</span><textarea value={copyA} onChange={(event) => setCopyA(event.target.value)} maxLength={5000} /></label><label className="field"><span>Price</span><span className="price-field"><span aria-hidden="true">$</span><input aria-label="Arm A price in US dollars" type="number" min={3} step="0.01" value={priceA / 100} onChange={(event) => setPriceA(Math.round(Number(event.target.value) * 100))} /></span></label></article>
@@ -443,8 +480,10 @@ function discardStaleSession() {
   return true;
 }
 
-export default function EmbeddedPage({ preview = false, screen = "history" }: { preview?: boolean; screen?: "history" | "setup" }) {
+export default function EmbeddedPage({ preview = false, screen = "history", resume }: {
+  preview?: boolean; screen?: "history" | "setup"; resume?: ResumeTarget;
+}) {
   useState(discardStaleSession);
   if (screen === "history") return preview ? <ExperimentHistory preview /> : <EmbeddedExperimentHistory />;
-  return <AuthProvider><PerformWorkspace preview={preview} /></AuthProvider>;
+  return <AuthProvider><PerformWorkspace preview={preview} resume={resume} /></AuthProvider>;
 }

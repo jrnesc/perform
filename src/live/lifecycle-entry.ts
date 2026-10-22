@@ -10,6 +10,7 @@ import {
 } from "./capabilities";
 import type { CapabilityRecordSnapshot } from "./capability-records";
 import type { VerifiedCreatorSession } from "./capture-entry";
+import { abandonInterruptedLaunch, type AbandonResult } from "./abandon";
 import { closeExperimentIfReady, type CloseResult } from "./close";
 import type { LaunchRepository } from "./launch-repository";
 import { reconcileObservation } from "./reconciliation";
@@ -94,6 +95,20 @@ export async function runGuardedClose(input: GuardInput & {
   const result = await closeExperimentIfReady({
     experimentId: input.experimentId, latestReconciliation, repository, launchRepository,
     transport: input.transport(), now: input.now,
+  });
+  return { status: "CHECKED", result };
+}
+
+/** The only REAL entry point for abandoning an interrupted launch: it deletes custom lists in Fanvue. */
+export async function runGuardedAbandon(input: GuardInput & {
+  transport: () => FanvueWriteTransport;
+  now: () => string;
+}): Promise<LifecycleRefusal | { status: "CHECKED"; result: AbandonResult }> {
+  const gate = await guard(input, closeCapabilities, true);
+  if ("status" in gate) return gate;
+  const { repository, launchRepository } = gate.repositories;
+  const result = await abandonInterruptedLaunch({
+    experimentId: input.experimentId, repository, launchRepository, transport: input.transport(), now: input.now,
   });
   return { status: "CHECKED", result };
 }

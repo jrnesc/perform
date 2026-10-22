@@ -3,6 +3,7 @@
 import { AuthProvider, useAuth, useEmbeddedAuth } from "@fanvue/builder-sdk/react";
 import { Drama, Plus } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { DEMO_EXPERIMENT_HISTORY } from "../../experiments/demo-experiment-history";
 import type { ExperimentRecord } from "../../persistence/contracts";
@@ -16,7 +17,7 @@ import {
 import type { AnalysedResult, AudienceMemberEvidence } from "../../results/contracts";
 import { DEMO_RESULT_FIXTURES } from "../../results/demo-results-v1";
 import { experimentResultDetail, experimentResultSummary } from "../../results/experiment-results";
-import { ResultComparison } from "./experiment-experience";
+import { ResultHeadline, UncertaintyChart } from "./experiment-experience";
 
 /** An experiment from the creator's own database, with its launch and latest reconciliation when it has them. */
 export type RealExperiment = ExperimentRecord & {
@@ -27,7 +28,7 @@ export type RealExperiment = ExperimentRecord & {
 type DatabaseExperiment = RealExperiment & { workspace: "real" | "demo" };
 
 export type LifecycleOutcome = { ok: true; message: string } | { ok: false; reasons: readonly string[] };
-export type LifecycleAction = (action: "reconcile" | "close", experiment: DatabaseExperiment) => Promise<LifecycleOutcome>;
+export type LifecycleAction = (action: "reconcile" | "close" | "discard" | "abandon", experiment: DatabaseExperiment) => Promise<LifecycleOutcome>;
 
 export const previewHistoryStorageKey = "perform:preview:experiments:v1";
 
@@ -100,8 +101,8 @@ export function AudienceEvidencePanel({ evidence, caveat }: { evidence: readonly
   const segments = dimension === "RELATIONSHIP" ? all.filter((segment) => segment.members.length > 0) : all;
   const absent = dimension === "RELATIONSHIP" ? all.filter((segment) => segment.members.length === 0).map((segment) => segment.label.toLowerCase()) : [];
   return <section className="audience-breakdown" aria-labelledby="audience-breakdown-title">
-    <header><div><p className="eyebrow">Descriptive audience evidence · <span className={live ? "provenance-live" : "fixture-label"}>{live ? "Live Fanvue evidence" : "Seeded demo · not live"}</span></p><h3 id="audience-breakdown-title">Who converted and reversed?</h3><p>New buyer means no settled purchase before assignment; returning buyer means at least one. Subscriber relationship is frozen before assignment from subscription history and renewal status. These cohorts describe this test and do not identify subgroup winners.</p></div><div className="breakdown-controls" aria-label="Audience breakdown"><button type="button" className={dimension === "PRIOR_PURCHASER" ? "active" : ""} aria-pressed={dimension === "PRIOR_PURCHASER"} onClick={() => setDimension("PRIOR_PURCHASER")}>Prior-purchaser status</button><button type="button" className={dimension === "RELATIONSHIP" ? "active" : ""} aria-pressed={dimension === "RELATIONSHIP"} onClick={() => setDimension("RELATIONSHIP")}>Subscriber relationship</button></div></header>
-    <div className="segment-grid">{segments.map((segment) => <article key={segment.key}><h4>{segment.label}</h4><p>{segment.members.length} assigned · exact denominator</p>{segment.isSmall ? <div className="segment-suppressed">Breakdown suppressed below 5 assigned members.</div> : <table><thead><tr><th scope="col">Arm</th><th scope="col">Converted</th><th scope="col">Settled revenue</th><th scope="col">Reversals</th></tr></thead><tbody>{(["A", "B"] as const).map((arm) => { const value = segment.arms[arm]; return <tr key={arm}><th scope="row">{arm}</th><td>{value.converted} / {value.assigned}</td><td>{money(value.settledRevenueMinor)}</td><td>{value.reversedPurchases}</td></tr>; })}</tbody></table>}</article>)}</div>
+    <header><div><div className="section-heading"><h2 id="audience-breakdown-title" className="section-title">Who converted and reversed?</h2><span className={live ? "provenance-live" : "fixture-label"}>{live ? "Live Fanvue evidence" : "Seeded demo · not live"}</span></div><p>New buyer means no settled purchase before assignment; returning buyer means at least one. Subscriber relationship is frozen before assignment from subscription history and renewal status. These cohorts describe this test and do not identify subgroup winners.</p></div><div className="breakdown-controls" aria-label="Audience breakdown"><button type="button" className={dimension === "PRIOR_PURCHASER" ? "active" : ""} aria-pressed={dimension === "PRIOR_PURCHASER"} onClick={() => setDimension("PRIOR_PURCHASER")}>Prior-purchaser status</button><button type="button" className={dimension === "RELATIONSHIP" ? "active" : ""} aria-pressed={dimension === "RELATIONSHIP"} onClick={() => setDimension("RELATIONSHIP")}>Subscriber relationship</button></div></header>
+    <table className="segment-table"><caption className="sr-only">Purchases by audience segment and arm</caption><thead><tr><th scope="col">Segment</th><th scope="col"><i className="arm-a" aria-hidden="true" />Arm A</th><th scope="col"><i className="arm-b" aria-hidden="true" />Arm B</th></tr></thead><tbody>{segments.map((segment) => <tr key={segment.key}><th scope="row">{segment.label}<small>{segment.members.length} assigned</small></th>{segment.isSmall ? <td colSpan={2} className="segment-suppressed">Hidden: fewer than 5 assigned members</td> : (["A", "B"] as const).map((arm) => { const value = segment.arms[arm]; return <td key={arm}><strong>{value.converted} of {value.assigned}</strong> bought<small>{money(value.settledRevenueMinor)} settled · {value.reversedPurchases} reversed</small></td>; })}</tr>)}</tbody></table>
     {absent.length > 0 && <p className="privacy-note">{absent.length === 2 && absent.includes("never subscribed") && absent.includes("lapsed") ? absentRelationshipNote : `No members in: ${absent.join(", ")}.`}</p>}
     {caveat && <p className="result-warning">{caveat}</p>}
     <details className="member-audit"><summary><span>Member audit</span><small>{evidence.length} {evidence.length === 1 ? "fan" : "fans"} · privacy-conscious</small></summary>
@@ -111,21 +112,136 @@ export function AudienceEvidencePanel({ evidence, caveat }: { evidence: readonly
   </section>;
 }
 
-function ExperimentLinkedResult({ experiment }: { experiment: ExperimentRecord }) {
-  const detail = experimentResultDetail(experiment, linkedResult(experiment));
-  if (!detail.result) return <div className="result-empty"><h2>No evidence yet</h2><p>{experiment.state === "RUNNING" ? "This experiment is running, but no complete result snapshot is available yet." : "This experiment has no result evidence. Perform will not attach another experiment’s scenario."}</p></div>;
-  const result = detail.result;
-  const metric = result.fixture.variable === "COPY" ? "Purchases / assigned recipient" : "Revenue / assigned recipient";
-  return <div className="linked-result">
-    <div className={`result-banner ${result.confidence.supportsLearning ? "ready" : "blocked"}`}><div><p className="eyebrow">Observed result · {result.status === "LEARNING_READY" ? "evidence gate passed" : result.status.replaceAll("_", " ")}</p><h3>{result.observedDirection.statement}</h3></div></div>
-    <aside className="uncertainty-note"><div><h3>Confidence and generalisation</h3><strong>{result.confidence.label}</strong><p>{result.confidence.statement}</p>{result.confidence.nextStep && <p><strong>Next step:</strong> {result.confidence.nextStep}</p>}</div>{result.estimate && <span>{Math.round(result.estimate.probabilityArmBBetter * 100)}% estimated chance Arm B is better · {result.estimate.draws.toLocaleString()} fixed-seed draws</span>}</aside>
-    <ResultComparison result={result} />
-    <h3 className="primary-metric-title">Primary metric <span>{metric}</span></h3>
-    <div className="arm-results">{(["A", "B"] as const).map((arm) => { const value = result.arms[arm]; return <article key={arm}><p className="eyebrow">Arm {arm} · {result.fixture.comparison[arm === "A" ? "armALabel" : "armBLabel"]}</p><h3>{result.fixture.variable === "COPY" ? percentage(value.primaryRate) : money(value.primaryRate)}</h3><p>{value.settledPurchases} settled purchases / {value.assignedRecipients} assigned</p><dl><div><dt>Gross revenue</dt><dd>{money(value.grossRevenueMinor)}</dd></div><div><dt>Settled revenue</dt><dd>{money(value.settledRevenueMinor)}</dd></div><div><dt>Full reversals</dt><dd>{value.reversedPurchases}</dd></div></dl></article>; })}</div>
-    <AudienceEvidencePanel evidence={result.fixture.audienceEvidence ?? []} />
-    <div className="result-columns"><section><h3>Evidence timeline</h3><p className="timeline-legend"><strong>Fixture provenance:</strong> Dry run is the frozen plan; Demo is versioned fictional evidence, not live data.</p><ol className="timeline">{result.fixture.evidence.map((event) => <li key={event.id}><span className={`timeline-dot ${event.source.toLowerCase()}`} aria-hidden="true" /><div><strong>{event.label}</strong><p>{event.detail}</p><time dateTime={event.occurredAt}>{formatHistoryDateTime(event.occurredAt)}</time></div></li>)}</ol></section><section><h3>Learning history</h3>{result.learning ? <ul className="learning-list"><li><p>{result.learning.statement}</p><small>{result.learning.audienceScope} · {result.learning.variable.toLowerCase()} test</small></li></ul> : <p>No learning passed the evidence and confidence gates.</p>}</section></div>
-    {result.warnings.map((warning) => <p className="result-warning" key={warning}>{warning}</p>)}
-  </div>;
+/** What each arm sent next to how it did, with the tested variable given the emphasis. */
+function ArmCards({ result }: { result: AnalysedResult }) {
+  const { variable, variants, comparison } = result.fixture;
+  const direction = result.observedDirection;
+  const winner = result.confidence.supportsLearning && direction.outcome !== "TIED" ? direction.outcome[0] : null;
+  const shared = variable === "COPY" ? `Same price for both arms: ${money(variants[0].priceMinor)}.` : `Same message for both arms: “${variants[0].copy}”`;
+  return <section className="detail-section" aria-labelledby="arms-title">
+    <h2 id="arms-title" className="section-title">What was tested</h2>
+    <p className="section-note">{shared}</p>
+    <div className="arm-cards">{variants.map((variant) => {
+      const value = result.arms[variant.arm];
+      return <article key={variant.arm} className={`arm-card ${winner === variant.arm ? "winner" : ""}`}>
+        <header><span className="arm-name"><i className={`arm-${variant.arm.toLowerCase()}`} aria-hidden="true" />Arm {variant.arm} <span>· {comparison[variant.arm === "A" ? "armALabel" : "armBLabel"]}</span></span>{winner === variant.arm && <span className="winner-pill">Performed better</span>}</header>
+        {variable === "COPY" ? <p className="arm-variable">“{variant.copy}”</p> : <p className="arm-variable arm-price">{money(variant.priceMinor)} <span>price</span></p>}
+        <div className="arm-outcome"><strong>{variable === "COPY" ? percentage(value.primaryRate) : money(value.primaryRate)}</strong><span>{variable === "COPY" ? "purchase rate" : "settled revenue per recipient"}</span></div>
+        <dl><div><dt>Bought</dt><dd>{value.settledPurchases} of {value.assignedRecipients}</dd></div><div><dt>Settled revenue</dt><dd>{money(value.settledRevenueMinor)}</dd></div><div><dt>Refunded or disputed</dt><dd>{value.reversedPurchases}</dd></div></dl>
+      </article>;
+    })}</div>
+    {result.warnings.map((warning) => <p className="section-note arm-warning" key={warning}>{warning}</p>)}
+  </section>;
+}
+
+/** Audit detail a creator rarely needs: one chronological timeline, then where the data came from and the stable ID. */
+function ExperimentRecord({ experiment, provenance, launch, result }: { experiment: ExperimentRecord; provenance: string; launch: RealExperiment["launch"]; result: AnalysedResult | null }) {
+  const events = [
+    { id: "created", at: experiment.createdAt, label: "Created", detail: null as string | null },
+    ...(result?.fixture.evidence ?? []).map((event) => ({ id: event.id, at: event.occurredAt, label: event.label, detail: event.detail })),
+    ...(launch ? [
+      { id: "scheduled", at: launch.scheduledAt, label: "Both messages scheduled", detail: `${launch.armCounts.A} in arm A · ${launch.armCounts.B} in arm B` },
+      { id: "window", at: launch.observationEndsAt, label: experiment.state === "CLOSED" ? "Observation window closed" : "Observation window ends", detail: null },
+    ] : []),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  return <details className="experiment-record"><summary><span>Experiment record</span><small>Timeline, data source and ID</small></summary>
+    <div className="experiment-record-body">
+      <ol className="timeline">{events.map((event) => <li key={event.id}><span className="timeline-dot" aria-hidden="true" /><div><strong>{event.label}</strong>{event.detail && <p>{event.detail}</p>}<time dateTime={event.at}>{formatHistoryDateTime(event.at)}</time></div></li>)}</ol>
+      <dl className="detail-facts"><div><dt>Data</dt><dd>{provenance}</dd></div><div><dt>ID</dt><dd><code>{experiment.id}</code></dd></div></dl>
+    </div>
+  </details>;
+}
+
+/** Experiment detail, read top to bottom: the verdict, what was tested, how sure, who converted, then the record. */
+function ExperimentDetail({ experiment, base, live, database, lifecycle }: { experiment: ExperimentRecord; base: string; live: boolean; database?: DatabaseExperiment; lifecycle?: LifecycleAction }) {
+  const launch = database?.launch ?? null;
+  const result = database ? null : experimentResultDetail(experiment, linkedResult(experiment)).result;
+  const provenance = live ? "Live Fanvue data" : database ? "Seeded database · fixture gateway, no Fanvue requests" : "Seeded demo fixture · no live data";
+  const audienceSize = launch ? launch.armCounts.A + launch.armCounts.B : experiment.snapshotCount;
+  const meta = [
+    `${experiment.variable === "COPY" ? "Copy" : "Price"} test`,
+    audienceLabel(experiment.sourceAudienceUuid),
+    audienceSize ? `${audienceSize} ${live ? "subscribers" : "fans"}` : null,
+    launch ? `${experiment.state === "CLOSED" ? "ended" : "ends"} ${formatHistoryDate(launch.observationEndsAt)}` : `updated ${formatHistoryDate(experiment.updatedAt)}`,
+  ].filter(Boolean).join(" · ");
+  const emptyTitle = experiment.state === "RUNNING" ? "Awaiting purchases" : experiment.state === "CLOSED" ? "Closed" : "No evidence yet";
+  const emptyBody = database
+    ? experiment.state === "RUNNING" ? "Both messages are scheduled. Results appear here once purchases from the two arms have been observed and reconciled." : experiment.state === "CLOSED" ? "Observation ended and metrics are frozen at the final reconciliation." : "Results appear once this experiment has been launched and observed."
+    : experiment.state === "RUNNING" ? "This experiment is running, but no complete result snapshot is available yet." : "This experiment has no result evidence. Perform will not attach another experiment’s scenario.";
+  return <>
+    <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href={base}>Experiments</Link><span>/</span><span>{experiment.name}</span></nav>
+    <header className="detail-hero"><div><h1>{experiment.name}</h1><p className="detail-meta">{meta}</p><p className="lede">{experiment.hypothesis}</p></div><span className={`status-pill state-${experiment.state.toLowerCase()}`}>{stateLabel(experiment.state)}</span></header>
+    {database?.launch && lifecycle && <ExperimentLifecycle key={experiment.id} experiment={database} lifecycle={lifecycle} />}
+    {database && !database.launch && experiment.state === "ALLOCATED" && lifecycle && <SavedExperimentActions key={experiment.id} experiment={database} lifecycle={lifecycle} base={base} />}
+    {database && (experiment.state === "PROVISIONING" || experiment.state === "VERIFIED") && lifecycle && <InterruptedLaunchActions key={experiment.id} experiment={database} lifecycle={lifecycle} base={base} />}
+    {result ? <div className="detail-flow">
+      <ResultHeadline result={result} />
+      <ArmCards result={result} />
+      <UncertaintyChart result={result} />
+      <AudienceEvidencePanel evidence={result.fixture.audienceEvidence ?? []} />
+    </div> : <div className="result-empty"><h2>{emptyTitle}</h2><p>{emptyBody}</p></div>}
+    <ExperimentRecord experiment={experiment} provenance={provenance} launch={launch} result={result} />
+  </>;
+}
+
+/** A saved experiment that was allocated but never launched: launch it later, or discard it. */
+/** A launch that stopped before any message was scheduled: it cannot resume, so it can be abandoned. */
+function InterruptedLaunchActions({ experiment, lifecycle, base }: {
+  experiment: DatabaseExperiment; lifecycle: LifecycleAction; base: string;
+}) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<readonly string[] | null>(null);
+  const seeded = experiment.workspace === "demo";
+  const abandon = async () => {
+    setBusy(true);
+    setProblem(null);
+    const outcome = await lifecycle("abandon", experiment);
+    setBusy(false);
+    if (outcome.ok) router.push(base);
+    else setProblem(outcome.reasons);
+  };
+  return <section className="detail-panel lifecycle-panel" aria-labelledby="interrupted-title">
+    <p className="eyebrow">Launch interrupted{seeded && <> · <span className="fixture-label">Seeded · zero Fanvue requests</span></>}</p>
+    <h2 id="interrupted-title">This launch stopped before sending</h2>
+    <p className="lifecycle-note">Perform started setting up the two custom lists{experiment.launch ? `, for delivery at ${formatHistoryDateTime(experiment.launch.scheduledAt)},` : ""} but stopped before scheduling any message, so no fan received anything. A launch is tied to its delivery time, so this one cannot be resumed. Abandoning it deletes the lists it created{seeded ? "" : " in Fanvue"} and hides it from your list.</p>
+    <div className="lifecycle-actions">
+      {confirming
+        ? <><span className="lifecycle-confirm">Abandon this launch and delete its lists?</span><button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep it</button><button type="button" className="danger" disabled={busy} aria-busy={busy} onClick={abandon}>{busy ? "Abandoning…" : "Abandon"}</button></>
+        : <button type="button" className="danger" onClick={() => setConfirming(true)}>Abandon launch</button>}
+    </div>
+    {problem && <div className="lifecycle-outcome blocked" role="alert"><strong>Not abandoned</strong><ul>{problem.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>}
+  </section>;
+}
+
+function SavedExperimentActions({ experiment, lifecycle, base }: {
+  experiment: DatabaseExperiment; lifecycle: LifecycleAction; base: string;
+}) {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<readonly string[] | null>(null);
+  const discard = async () => {
+    setBusy(true);
+    setProblem(null);
+    const outcome = await lifecycle("discard", experiment);
+    setBusy(false);
+    if (outcome.ok) router.push(base);
+    else setProblem(outcome.reasons);
+  };
+  const resumeHref = `${base}/new?resume=${encodeURIComponent(experiment.id)}&workspace=${experiment.workspace}`;
+  return <section className="detail-panel lifecycle-panel" aria-labelledby="saved-title">
+    <p className="eyebrow">Not launched{experiment.workspace === "demo" && <> · <span className="fixture-label">Seeded · zero Fanvue requests</span></>}</p>
+    <h2 id="saved-title">Ready to launch</h2>
+    <p className="lifecycle-note">The audience is frozen and split into two arms, but nothing has been created or sent in Fanvue. Continue to choose a delivery time and schedule both arms, or discard it.</p>
+    <div className="lifecycle-actions">
+      {confirming
+        ? <><span className="lifecycle-confirm">Discard this experiment? It will be hidden from your list.</span><button type="button" className="secondary" disabled={busy} onClick={() => setConfirming(false)}>Keep it</button><button type="button" className="danger" disabled={busy} aria-busy={busy} onClick={discard}>{busy ? "Discarding…" : "Discard"}</button></>
+        : <><button type="button" className="secondary" onClick={() => setConfirming(true)}>Discard</button><Link className="primary button-link" href={resumeHref}>Continue to launch</Link></>}
+    </div>
+    {problem && <div className="lifecycle-outcome blocked" role="alert"><strong>Not discarded</strong><ul>{problem.map((reason) => <li key={reason}>{reason}</li>)}</ul></div>}
+  </section>;
 }
 
 /** Manual reconciliation and checked close for a launched database experiment (ADR 0020). */
@@ -191,16 +307,10 @@ export function ExperimentHistory({
     <header className="masthead"><Link className="brand-lockup history-brand" href={base}><span className="brand-mark" aria-hidden="true"><Drama size={19} /></span><div><strong>Perform</strong><span>Offer experiments</span></div></Link><span className="connection"><i />{preview ? "Fixture preview" : "Creator workspace"}</span></header>
     <div className={`workspace-shell ${selectedId ? "history-shell" : "setup-shell"}`}>
       {selectedId ? selected ? <>
-        <nav className="breadcrumbs" aria-label="Breadcrumb"><Link href={base}>Experiments</Link><span>/</span><span>{selected.name}</span></nav>
-        <header className="detail-hero"><div><h1>{selected.name}</h1><p className="lede">{selected.hypothesis}</p></div><span className={`status-pill state-${selected.state.toLowerCase()}`}>{stateLabel(selected.state)}</span></header>
-        <nav className="detail-tabs" aria-label="Experiment sections"><a href="#overview">Overview</a><a href="#results">Results</a><a href="#audience">Audience</a></nav>
-        <section id="overview" className="detail-panel"><div><p className="eyebrow">Overview</p><h2>Saved experiment definition</h2></div><dl className="detail-facts"><div><dt>Stable ID</dt><dd><code>{selected.id}</code></dd></div><div><dt>Variable</dt><dd>{selected.variable === "COPY" ? "Copy only" : "Price only"}</dd></div><div><dt>Source audience</dt><dd>{audienceLabel(selected.sourceAudienceUuid)}</dd></div><div><dt>Created</dt><dd>{formatHistoryDateTime(selected.createdAt)}</dd></div><div><dt>Updated</dt><dd>{formatHistoryDateTime(selected.updatedAt)}</dd></div><div><dt>Provenance</dt><dd>{realById.has(selected.id) ? "Live Fanvue data" : dbById.has(selected.id) ? "Seeded database · fixture gateway, no Fanvue requests" : "Seeded demo fixture · no live data"}</dd></div>{dbById.get(selected.id)?.launch && <><div><dt>Scheduled delivery</dt><dd>{formatHistoryDateTime(dbById.get(selected.id)!.launch!.scheduledAt)}</dd></div><div><dt>Observation ends</dt><dd>{formatHistoryDateTime(dbById.get(selected.id)!.launch!.observationEndsAt)}</dd></div><div><dt>Recipients</dt><dd>{dbById.get(selected.id)!.launch!.armCounts.A} in arm A · {dbById.get(selected.id)!.launch!.armCounts.B} in arm B</dd></div></>}</dl>{linkedResult(selected) && <div className="frozen-variants"><h3>Frozen variants</h3>{linkedResult(selected)?.fixture.variants.map((variant) => <article key={variant.arm}><strong>Arm {variant.arm}</strong><p>{variant.copy}</p><span>{money(variant.priceMinor)}</span></article>)}</div>}</section>
-        {dbById.get(selected.id)?.launch && lifecycle && <ExperimentLifecycle key={selected.id} experiment={dbById.get(selected.id)!} lifecycle={lifecycle} />}
-        <section id="results" className="results-block"><h2 className="results-title">Results</h2>{dbById.has(selected.id) ? <div className="result-empty"><h2>{selected.state === "RUNNING" ? "Awaiting purchases" : selected.state === "CLOSED" ? "Closed" : "No evidence yet"}</h2><p>{selected.state === "RUNNING" ? "Both messages are scheduled. Results appear here once purchases from the two arms have been observed and reconciled." : selected.state === "CLOSED" ? "Observation ended and metrics are frozen at the final reconciliation." : "Results appear once this experiment has been launched and observed."}</p></div> : <ExperimentLinkedResult experiment={selected} />}</section>
-        <section id="audience" className="detail-panel"><p className="eyebrow">Audience</p><h2>Frozen source context</h2><p>{selected.snapshotCount ? `${selected.snapshotCount} eligible ${realById.has(selected.id) ? "subscribers were frozen" : "fixture members were recorded"} for the snapshot.` : "This draft has no frozen audience snapshot yet."} Audience-level evidence remains descriptive and fixture-backed.</p></section>
+        <ExperimentDetail experiment={selected} base={base} live={realById.has(selected.id)} database={dbById.get(selected.id)} lifecycle={lifecycle} />
       </> : realLoading ? <section className="empty-state history-empty" role="status" aria-busy="true"><h1>Loading experiment…</h1></section> : <section className="empty-state history-empty"><p className="eyebrow">Not found</p><h1>That experiment is not in this workspace.</h1><p>Experiment detail fails closed when its creator or provenance-scoped record cannot be found.</p><Link className="primary button-link" href={base}>Return to experiments</Link></section> : <>
-        <header className="history-hero"><div><h1>Your experiments</h1><p className="lede">Create, resume and inspect named tests. Fixture records stay clearly labelled; REAL launches require every server-side gate and an exact confirmation.</p></div><div className="history-actions">{!preview && <div className="workspace-switch" role="group" aria-label="Data workspace"><button type="button" aria-pressed={view === "live"} className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button><button type="button" aria-pressed={view === "seeded"} className={view === "seeded" ? "active" : ""} onClick={() => setView("seeded")}>Seeded demo</button></div>}<Link className="primary button-link" href={`${base}/new`}><Plus size={16} />Create A/B test</Link></div></header>
-        {listed.length === 0 ? <section className="empty-state history-empty"><h2>{view === "live" && !preview ? (realLoading ? "Loading your experiments…" : "No live experiments yet") : "No experiments yet"}</h2><p>{view === "live" && !preview ? "Experiments you launch from Perform appear here. Switch to Seeded demo to see example results." : "Create your first named A/B test. It will appear here after it is saved."}</p></section> : <section className="history-table-wrap" aria-label="Experiment history"><table className="history-table"><thead><tr><th scope="col">Experiment</th><th scope="col">Status</th><th scope="col">Ends</th><th scope="col">Result</th><th scope="col">Variable</th><th scope="col">Audience</th><th scope="col">Updated</th></tr></thead><tbody>{listed.map((experiment) => <tr key={experiment.id}><th scope="row"><Link href={`${base}/experiments/${encodeURIComponent(experiment.id)}`}>{experiment.name}</Link><span>{experiment.hypothesis}</span>{dbById.get(experiment.id)?.launch && <span>{realById.has(experiment.id) ? "Live" : "Seeded"} · delivers {formatHistoryDateTime(dbById.get(experiment.id)!.launch!.scheduledAt)} · {dbById.get(experiment.id)!.launch!.armCounts.A + dbById.get(experiment.id)!.launch!.armCounts.B} recipients</span>}</th><td><span className={`status-pill state-${experiment.state.toLowerCase()}`}>{stateLabel(experiment.state)}</span></td><td>{dbById.get(experiment.id)?.launch ? <time dateTime={dbById.get(experiment.id)!.launch!.observationEndsAt}>{formatHistoryDate(dbById.get(experiment.id)!.launch!.observationEndsAt)}</time> : "—"}</td><td>{dbById.has(experiment.id) ? (experiment.state === "RUNNING" ? "Awaiting purchases" : experiment.state === "CLOSED" ? "Closed" : "No evidence yet") : resultSummaryLabel(experiment)}</td><td>{experiment.variable === "COPY" ? "Copy" : "Price"}</td><td>{audienceLabel(experiment.sourceAudienceUuid)}</td><td><time dateTime={experiment.updatedAt}>{formatHistoryDate(experiment.updatedAt)}</time></td></tr>)}</tbody></table>{(preview || view === "seeded") && <p className="fixture-note"><span className="fixture-label">Seeded demo</span> Four fixtures cover ready, running and blocked outcomes. Newly saved preview tests appear here too.</p>}</section>}
+        <header className="history-hero"><div><h1>Your experiments</h1><p className="lede">Create, resume and inspect named tests. Fixture records stay clearly labelled; REAL launches require every server-side gate and an exact confirmation.</p></div><div className="history-actions">{!preview && <div className="workspace-switch" role="group" aria-label="Data workspace"><button type="button" aria-pressed={view === "live"} className={view === "live" ? "active" : ""} onClick={() => setView("live")}>Live</button><button type="button" aria-pressed={view === "seeded"} className={view === "seeded" ? "active" : ""} onClick={() => setView("seeded")}>Demo</button></div>}<Link className="primary button-link" href={`${base}/new`}><Plus size={16} />Create A/B test</Link></div></header>
+        {listed.length === 0 ? <section className="empty-state history-empty"><h2>{view === "live" && !preview ? (realLoading ? "Loading your experiments…" : "No live experiments yet") : "No experiments yet"}</h2><p>{view === "live" && !preview ? "Experiments you launch from Perform appear here. Switch to Demo to see example results." : "Create your first named A/B test. It will appear here after it is saved."}</p></section> : <section className="history-table-wrap" aria-label="Experiment history"><table className="history-table"><thead><tr><th scope="col">Experiment</th><th scope="col">Status</th><th scope="col">Result</th><th scope="col">Updated</th></tr></thead><tbody>{listed.map((experiment) => { const launch = dbById.get(experiment.id)?.launch; return <tr key={experiment.id}><th scope="row"><Link href={`${base}/experiments/${encodeURIComponent(experiment.id)}`}>{experiment.name}</Link><span>{experiment.variable === "COPY" ? "Copy" : "Price"} test · {audienceLabel(experiment.sourceAudienceUuid)}{launch && <> · {launch.armCounts.A + launch.armCounts.B} recipients · {realById.has(experiment.id) ? "live" : "seeded"}</>}</span></th><td data-label="Status"><span className={`status-pill state-${experiment.state.toLowerCase()}`}>{stateLabel(experiment.state)}</span>{launch && <small>Ends <time dateTime={launch.observationEndsAt}>{formatHistoryDate(launch.observationEndsAt)}</time></small>}</td><td data-label="Result" className="history-result">{dbById.has(experiment.id) ? (experiment.state === "RUNNING" ? "Awaiting purchases" : experiment.state === "CLOSED" ? "Closed" : "No evidence yet") : resultSummaryLabel(experiment)}</td><td data-label="Updated"><time dateTime={experiment.updatedAt}>{formatHistoryDate(experiment.updatedAt)}</time></td></tr>; })}</tbody></table>{(preview || view === "seeded") && <p className="fixture-note"><span className="fixture-label">Seeded demo</span> Four fixtures cover ready, running and blocked outcomes. Newly saved preview tests appear here too.</p>}</section>}
       </>}
     </div>
   </main>;
@@ -208,7 +318,8 @@ export function ExperimentHistory({
 
 
 type LifecycleBody = {
-  result?: { status: "CLOSED"; deletedLists: number } | { status: "OPEN"; reasons: readonly string[] };
+  discarded?: boolean;
+  result?: { status: "CLOSED" | "ABANDONED"; deletedLists: number } | { status: "OPEN" | "REFUSED"; reasons: readonly string[] };
   reconciliation?: { isComplete: boolean; note: string };
   error?: { message: string };
 };
@@ -241,9 +352,11 @@ function RealHistory({ selectedId }: { selectedId?: string }) {
         body: JSON.stringify({ experimentId: experiment.id, workspace: experiment.workspace }),
       });
       const body = await response.json().catch(() => ({})) as LifecycleBody;
-      if (body.result?.status === "OPEN") return { ok: false, reasons: body.result.reasons };
+      if (body.result?.status === "OPEN" || body.result?.status === "REFUSED") return { ok: false, reasons: body.result.reasons };
       if (!response.ok || body.error) return { ok: false, reasons: [body.error?.message ?? "The request failed."] };
       setRevision((value) => value + 1);
+      if (body.discarded) return { ok: true, message: "Experiment discarded." };
+      if (body.result?.status === "ABANDONED") return { ok: true, message: "Launch abandoned and its lists deleted." };
       if (body.result?.status === "CLOSED") return { ok: true, message: "Experiment closed. Both custom lists are deleted and metrics are frozen." };
       return { ok: true, message: body.reconciliation?.note ?? "Reconciliation recorded." };
     } catch {

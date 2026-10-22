@@ -2,6 +2,8 @@ import { getSession } from "@fanvue/builder-sdk/nextjs/embedded-app";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
 import { D1PerformRepository, type SqlDatabase } from "../../../persistence/d1-perform-repository";
+import { discardedReason } from "../../../experiments/saved-experiment";
+import { abandonedReason } from "../../../live/abandon";
 import { D1LiveEvidenceRepository } from "../../../persistence/live-evidence";
 import { canUseDemoWorkspace } from "../../../workspace/authorization";
 
@@ -16,7 +18,8 @@ function jsonError(status: number, code: string, message: string) {
 
 /**
  * The signed-in creator's database experiments, newest first, with launch details, recipients per
- * arm and the latest reconciliation. `?workspace=demo` reads the seeded database instead.
+ * arm and the latest reconciliation, without discarded drafts or abandoned launches. `?workspace=demo` reads the seeded
+ * database instead.
  */
 export async function GET(request: Request) {
   const secret = process.env.SESSION_SECRET;
@@ -37,7 +40,7 @@ export async function GET(request: Request) {
   const db = binding as unknown as SqlDatabase;
 
   const experiments = await new D1PerformRepository(db, session.userUuid, provenance).listExperiments();
-  const [launches, counts, reconciliations] = await Promise.all([
+  const [launches, counts, reconciliations, discarded] = await Promise.all([
     db.prepare(
       `SELECT l.experiment_id, l.scheduled_at, l.observation_ends_at FROM launch_confirmations l
        JOIN experiments e ON e.id = l.experiment_id
@@ -49,7 +52,12 @@ export async function GET(request: Request) {
        WHERE e.creator_uuid = ? AND e.data_provenance = ? GROUP BY a.experiment_id, a.arm`,
     ).bind(session.userUuid, provenance).all<CountRow>(),
     new D1LiveEvidenceRepository(db, session.userUuid, provenance).latestReconciliations(),
+    db.prepare(
+      `SELECT id FROM experiments
+       WHERE creator_uuid = ? AND data_provenance = ? AND state = 'INVALID' AND invalid_reason IN (?, ?)`,
+    ).bind(session.userUuid, provenance, discardedReason, abandonedReason).all<{ id: string }>(),
   ]);
+  const hidden = new Set((discarded.results ?? []).map(({ id }) => id));
   const launchById = new Map((launches.results ?? []).map((row) => [row.experiment_id, row]));
   const reconciliationById = new Map(reconciliations.map((record) => [record.experimentId, record]));
   const armCounts = new Map<string, { A: number; B: number }>();
@@ -59,7 +67,7 @@ export async function GET(request: Request) {
     armCounts.set(row.experiment_id, entry);
   }
   return NextResponse.json({
-    experiments: experiments.map((experiment) => {
+    experiments: experiments.filter(({ id }) => !hidden.has(id)).map((experiment) => {
       const launch = launchById.get(experiment.id);
       const reconciliation = reconciliationById.get(experiment.id);
       return {

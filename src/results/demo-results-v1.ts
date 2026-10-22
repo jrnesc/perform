@@ -39,11 +39,14 @@ const completeWindow = {
   isComplete: true,
 };
 
-function timeline(id: string) {
+/** Demo evidence events that match the fixture's state: no closed window while running, one send on a partial launch. */
+function timeline(id: string, stage: "closed" | "running" | "partial" = "closed") {
   return [
-    { id: `${id}:planned`, source: "DRY_RUN" as const, occurredAt: "2026-10-17T08:30:00.000Z", label: "Effect plan frozen", detail: "No action was executed by the dry run." },
-    { id: `${id}:seeded`, source: "DEMO" as const, occurredAt: "2026-10-17T09:00:00.000Z", label: "Launch evidence", detail: "Assignments and message identifiers were loaded for the scenario." },
-    { id: `${id}:observed`, source: "DEMO" as const, occurredAt: "2026-10-19T10:00:00.000Z", label: "Observation closed", detail: "Purchases and full reversals were counted through the fixed window." },
+    { id: `${id}:planned`, source: "DRY_RUN" as const, occurredAt: "2026-10-17T08:30:00.000Z", label: "Plan locked", detail: "Audience frozen and split into two arms. Nothing was sent yet." },
+    stage === "partial"
+      ? { id: `${id}:seeded`, source: "DEMO" as const, occurredAt: "2026-10-17T09:00:00.000Z", label: "Only one message confirmed", detail: "Arm B’s send did not confirm, so the launch stopped for operator review." }
+      : { id: `${id}:seeded`, source: "DEMO" as const, occurredAt: "2026-10-17T09:00:00.000Z", label: "Both messages sent", detail: "Each arm received its own message at the same time." },
+    ...(stage === "closed" ? [{ id: `${id}:observed`, source: "DEMO" as const, occurredAt: "2026-10-19T10:00:00.000Z", label: "Observation window closed", detail: "Purchases, refunds and disputes were counted through the window." }] : []),
   ];
 }
 
@@ -139,7 +142,7 @@ const RAW_DEMO_RESULT_FIXTURES: readonly DemoResultFixture[] = [
     assignments: assignments(12),
     purchases: [...purchases("A", [1200, 1200]), ...purchases("B", [1200, 1200, 1200, 1200])],
     observation: { ...completeWindow, isComplete: false },
-    evidence: timeline("incomplete"),
+    evidence: timeline("incomplete", "running"),
     comparison: { armALabel: "$12 offer", armBLabel: "$15 offer", currency: "USD" },
   },
   {
@@ -155,7 +158,7 @@ const RAW_DEMO_RESULT_FIXTURES: readonly DemoResultFixture[] = [
     assignments: assignments(12),
     purchases: purchases("A", [1200, 1200]),
     observation: { ...completeWindow, isComplete: false },
-    evidence: timeline("partial-launch"),
+    evidence: timeline("partial-launch", "partial"),
     comparison: { armALabel: "$12 offer", armBLabel: "$15 offer", currency: "USD" },
   },
   {

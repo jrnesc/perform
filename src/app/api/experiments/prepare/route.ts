@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import type { VariantDefinition } from "../../../../domain/experiment-state";
 import { buildDryRunPlan } from "../../../../experiments/dry-run-plan";
 import { buildExperimentReview } from "../../../../experiments/review";
+import { liveSubscribersAudience } from "../../../../experiments/saved-experiment";
 import { FanvueMediaGateway } from "../../../../integrations/fanvue/fanvue-media-gateway";
 import { createFanvueReadTransport } from "../../../../integrations/fanvue/read-transport";
 import { captureLiveAudience, persistLiveAudienceSnapshot } from "../../../../live/audience-capture";
@@ -111,14 +112,7 @@ export async function POST(request: Request) {
     if ((await repository.getExperiment(experiment.id))?.state !== "ALLOCATED") {
       throw new Error("Live preparation requires an allocated experiment");
     }
-    const audience = {
-      id: "subscribers", name: "Active subscribers",
-      description: "Contactable subscribers read from Fanvue and frozen before launch.",
-      sourceKind: "FANVUE_SMART_LIST" as const, capturedAt,
-      members: assignments.map(({ fanUuid, stratum }) => ({ fanUuid, stratum })),
-      sourceCount: assignments.length, exclusions: [],
-      provenance: { kind: "FANVUE" as const, label: "Live Fanvue audience" as const },
-    };
+    const audience = liveSubscribersAudience(assignments, capturedAt);
     const review = await buildExperimentReview({
       id: experiment.id, name: body.name, audience, asset: media,
       variable: body.variable, hypothesis: body.hypothesis, variants,

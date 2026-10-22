@@ -31,7 +31,7 @@ describe("Experiment dashboard", () => {
     render(<ExperimentHistory preview selectedId="demo:experiment:copy-complete" />);
     expect(screen.getByRole("heading", { name: "Specific preview copy", level: 1 })).not.toBeNull();
     expect(screen.getByRole("heading", { name: /Arm B produced 33% more settled purchases/ })).not.toBeNull();
-    expect(screen.getByRole("img", { name: /Primary outcome for Arm A and Arm B/ })).not.toBeNull();
+    expect(screen.getAllByRole("heading", { level: 2 }).map(({ textContent }) => textContent)).toEqual(["What was tested", "How sure is this?", "Who converted and reversed?"]);
     expect(screen.queryByText("Two PPV price points")).toBeNull();
   });
 
@@ -42,9 +42,9 @@ describe("Experiment dashboard", () => {
     const relationship = screen.getByRole("button", { name: "Subscriber relationship" });
     fireEvent.click(relationship);
     expect(relationship.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("heading", { name: "Active · renewing" })).not.toBeNull();
-    expect(screen.getByRole("heading", { name: "Trialing" })).not.toBeNull();
-    expect(screen.queryByRole("heading", { name: "Lapsed" })).toBeNull();
+    expect(screen.getByRole("rowheader", { name: /^Active · renewing/ })).not.toBeNull();
+    expect(screen.getByRole("rowheader", { name: /^Trialing/ })).not.toBeNull();
+    expect(screen.queryByRole("rowheader", { name: /^Lapsed/ })).toBeNull();
     expect(screen.getByText(/subscribers list holds current subscribers only/)).not.toBeNull();
     expect(screen.getByText(/No display names, handles, email addresses/)).not.toBeNull();
     expect(screen.getByRole("table", { name: /Stable UUIDs and experiment evidence only/ })).not.toBeNull();
