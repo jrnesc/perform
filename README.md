@@ -13,6 +13,21 @@ It is an embedded Fanvue app for A/B testing paid (PPV) mass messages. A creator
 
 Every real effect sits behind server-side gates. A seeded workspace runs the same flow against fixtures and makes zero Fanvue requests.
 
+## Try it
+
+- **Video walkthrough:** <!-- TODO: add video link -->
+- **Hosted preview:** [perform-fanvue.augur-2f4.workers.dev/preview](https://perform-fanvue.augur-2f4.workers.dev/preview). No Fanvue account, install or login needed.
+
+Perform is an embedded Fanvue app: creators open it inside Fanvue, which signs them in. The hosted preview runs the same interface against seeded data, so it works in any browser and never contacts Fanvue.
+
+A quick tour of the preview:
+
+1. **Experiments.** The home page lists four seeded experiments: a finished result, a running test, a launch that stopped partway and an invalid comparison. Open **Specific preview copy** to see the verdict, both arms side by side, how certain the result is, and who converted, split by new and returning buyers.
+2. **Create A/B test.** Walk through the five setup steps: Audience, Asset, Question, Variants and Review. Variants enforce a single change, either copy or price.
+3. **Review.** Shows the exact Fanvue actions a real launch would take, as a dry run. Nothing is sent from the preview.
+
+The video covers the real embedded app inside Fanvue: a live launch, live results, reconciliation and close.
+
 ## Architecture
 
 ```mermaid
@@ -112,26 +127,32 @@ src/
 migrations/       D1 schema
 ```
 
-## Running it
+## Running it locally
+
+Requires Node 22.5 or newer (the tests use Node's built-in SQLite) and pnpm 10.
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-- `http://localhost:3000/preview` is a seeded design harness. It needs no Fanvue session, D1 binding or `.env.local`.
-- `/embedded` is the real app. It only works when opened from Fanvue, with the values from `.env.example` set.
+Then open `http://localhost:3000/preview`. The preview needs no Fanvue account, Cloudflare account, database or `.env.local`.
+
+`/embedded` is the real app. It only works when opened from Fanvue, with the values from `.env.example` set and the D1 databases migrated.
+
+Checks:
 
 ```bash
 pnpm test
 pnpm exec tsc --noEmit
 pnpm lint
 pnpm build
-pnpm cf:deploy
 ```
 
-Migrations: `pnpm exec wrangler d1 migrations apply perform-real --remote` (and `perform-demo`).
+Deploying (owner only) uses `pnpm cf:deploy`, and migrations use `pnpm exec wrangler d1 migrations apply perform-real --remote` (and `perform-demo`).
 
 ## Status
 
-Deployed at `https://perform-fanvue.augur-2f4.workers.dev`. The first real experiment launched on 22 October 2026 (both arms scheduled and delivered). Launch, observation window, reconciliation and close are built; live results on the detail page and scheduled operations (automatic reconciliation, alerting, per-creator webhook secrets) are next.
+Deployed at `https://perform-fanvue.augur-2f4.workers.dev`. The first real experiment launched on 22 October 2026, with both arms scheduled and delivered. Launch, the observation window, live results, reconciliation and close are built. Any creator who installs the app can use it: capabilities activate automatically once Fanvue's API contract has been verified, and payment webhooks are stored for the creator they name (ADR 0022).
+
+Running at scale would add an operations phase: scheduled reconciliation, alerting for failed or missing webhooks, and webhook secret rotation.
